@@ -1,0 +1,9 @@
+/* CSS for MathXBlock */
+
+.math_block .count {
+    font-weight: bold;
+}
+
+.math_block p {
+    cursor: pointer;
+}
