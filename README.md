@@ -17,7 +17,8 @@ Problem Setup
 * Verify release dates and deadlines, as well as per-student times
 * Limit attempts
 * "Show Answer" option
-* __Load and Display HTML from PG__ based on seed
+* __Load HTML from PG__ based on seed. 
+* Display HTML, setting up MathJax and any custom CSS/JS
 
 Problem Grading
 ---------------
