@@ -1,9 +1,9 @@
-/* CSS for MathXBlock */
+/* CSS for WeBWorKXBlock */
 
-.math_block .count {
+.webwork_block .count {
     font-weight: bold;
 }
 
-.math_block p {
+.webwork_block p {
     cursor: pointer;
 }
