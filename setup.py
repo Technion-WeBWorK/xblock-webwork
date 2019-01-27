@@ -22,20 +22,20 @@ def package_data(pkg, roots):
 
 
 setup(
-    name='math-xblock',
+    name='webwork-xblock',
     version='0.1',
-    description='math XBlock',   # TODO: write a better description.
-    license='UNKNOWN',          # TODO: choose a license: 'AGPL v3' and 'Apache 2.0' are popular.
+    description='Webwork XBlock'
+    license='UNKNOWN',
     packages=[
-        'math',
+        'webwork',
     ],
     install_requires=[
         'XBlock',
     ],
     entry_points={
         'xblock.v1': [
-            'math = math:MathXBlock',
+            'webwork = webwork:WeBWorKXBlock',
         ]
     },
-    package_data=package_data("math", ["static", "public"]),
+    package_data=package_data("webwork", ["static", "public"]),
 )
