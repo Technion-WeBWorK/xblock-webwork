@@ -24,7 +24,7 @@ def package_data(pkg, roots):
 setup(
     name='webwork-xblock',
     version='0.1',
-    description='Webwork XBlock'
+    description='Webwork XBlock',
     license='UNKNOWN',
     packages=[
         'webwork',

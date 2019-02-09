@@ -6,7 +6,7 @@ from xblock.fields import Integer, Scope
 from xblock.fragment import Fragment
 
 
-class WeBWroKXBlock(XBlock):
+class WeBWorKXBlock(XBlock):
     """
     TO-DO: document what your XBlock does.
     """
@@ -15,6 +15,9 @@ class WeBWroKXBlock(XBlock):
     # self.<fieldname>.
 
     # TO-DO: delete count, and define your own fields.
+    display_name = String(
+	display_name = "Display Name",
+
     count = Integer(
         default=0, scope=Scope.user_state,
         help="A simple counter, to show something happening",
