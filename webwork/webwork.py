@@ -10,15 +10,17 @@ from xblock.core import XBlock
 from django.utils.translation import ugettext_lazy as _ 
 from xblock.fields import String, Scope, Integer, Dict, Float
 from xblock.fragment import Fragment
-from xblockutils.studio_editable import StudioEditableXBlockMixin
+#from xblockutils.studio_editable import StudioEditableXBlockMixin
 
 from scorable import ScorableXBlockMixin, Score
 
 @XBlock.needs("user")
-class WeBWorKXBlock(StudioEditableXBlockMixin, ScorableXBlockMixin, XBlock):
+class WeBWorKXBlock(ScorableXBlockMixin, XBlock):#, StudioEditableXBlockMixin):
     """
     XBlock that uses WeBWorK's PG grader.
     """
+
+    due = None
 
     # Makes LMS icon appear as a problem
     icon_class = 'problem'
@@ -54,6 +56,7 @@ class WeBWorKXBlock(StudioEditableXBlockMixin, ScorableXBlockMixin, XBlock):
         help = _("Max number of allowed submissions (0 = unlimited)"),
     )
 
+
     # ----------- Internal student fields -----------
     student_answer = Dict(
         default = None,
@@ -66,6 +69,13 @@ class WeBWorKXBlock(StudioEditableXBlockMixin, ScorableXBlockMixin, XBlock):
         scope = Scope.user_state,
         help = _("Number of times student has submitted problem"),
     )
+
+    count  = Integer(
+        default = 0,
+        scope = Scope.user_state,
+        help = _("Current Count"),
+    )
+
 
     # ----------- Grading -----------
     def has_submitted_answer(self):
@@ -124,7 +134,7 @@ class WeBWorKXBlock(StudioEditableXBlockMixin, ScorableXBlockMixin, XBlock):
         """
         Handle the student's submission.
         """
-        response = response = {'success': False}
+        response = {'success': False}
 
         # Make sure attempts left
         if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
