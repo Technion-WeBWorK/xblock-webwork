@@ -5,18 +5,18 @@ function WeBWorKXBlock(runtime, element) {
         $('.count', element).text(result.count);
     }
 
-    var handlerUrl = runtime.handlerUrl(element, 'increment_count');
+    var handlerUrl = runtime.handlerUrl(element, 'submit_webwork');
 
     $('p', element).click(function(eventObject) {
         $.ajax({
             type: "POST",
             url: handlerUrl,
-            data: JSON.stringify({"hello": "world"}),
+            data: JSON.stringify({"increase_by": 1}),
             success: updateCount
         });
     });
 
     $(function ($) {
-        /* Here's where you'd do things on page load. */
+
     });
 }

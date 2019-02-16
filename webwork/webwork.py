@@ -144,7 +144,7 @@ class WeBWorKXBlock(StudioEditableXBlockMixin, ScorableXBlockMixin, XBlock):
                 status = 200,
             )
 
-        self.count += 1
+        self.count += int(request.increase_by)
         return {"count": self.count}
 
     # ----------- Extras -----------
