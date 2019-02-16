@@ -8,7 +8,7 @@ import json
 
 from xblock.core import XBlock
 from django.utils.translation import ugettext_lazy as _ 
-from xblock.fields import String, Scope, Integer, Dictionary, Float
+from xblock.fields import String, Scope, Integer, Dict, Float
 from xblock.fragment import Fragment
 from xblockutils.studio_editable import StudioEditableXBlockMixin
 
@@ -55,7 +55,7 @@ class WeBWorKXBlock(StudioEditableXBlockMixin, ScorableXBlockMixin, XBlock):
     )
 
     # ----------- Internal student fields -----------
-    student_answer = Dictionary(
+    student_answer = Dict(
         default = None,
         scope = Scope.user_state,
         help = _("The student's answer."),
