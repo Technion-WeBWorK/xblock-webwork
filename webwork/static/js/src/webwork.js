@@ -1,19 +1,56 @@
 /* Javascript for WeBWorKXBlock. */
-function WeBWorKXBlock(runtime, element) {
+(function ($) {
+    $.fn.serializeFormJSON = function () {
 
-    function updateCount(result) {
-        $('.count', element).text(result.count);
-    }
+        var o = {};
+        var a = this.serializeArray();
+        $.each(a, function () {
+            if (o[this.name]) {
+                if (!o[this.name].push) {
+                    o[this.name] = [o[this.name]];
+                }
+                o[this.name].push(this.value || '');
+            } else {
+                o[this.name] = this.value || '';
+            }
+        });
+        return o;
+    };
+})(jQuery);
+
+function WeBWorKXBlock(runtime, element) {
 
     var handlerUrl = runtime.handlerUrl(element, 'submit_webwork');
 
-    $('p', element).click(function(eventObject) {
+    function handleResopnse(result) {
+        $("#edx_message").html("")
+        $("#edx_webwork_result").html("")
+        if (result.success){
+            $("#edx_webwork_result")[0].innerHTML = result.data
+            MathJax.Hub.Queue(["Typeset",MathJax.Hub]);
+            if (result.scored) {
+                $("#edx_message").html("You scored " + result.score + "%.")
+            }
+        }else{
+            $("#edx_message").html(result.message)
+        }
+    }
+
+    $("#edx_webwork_problem", element).on('click', '#problemMainForm input[type="submit"]',function(e) {
+
+        e.preventDefault(); 
+
+        form_data = $('#problemMainForm').serializeFormJSON()
+        form_data["submit_type"] = this.name
+
         $.ajax({
             type: "POST",
             url: handlerUrl,
-            data: JSON.stringify({"increase_by": 1}),
-            success: updateCount
+            data: JSON.stringify(form_data),
+            success: handleResopnse,
+            error: handleResopnse
         });
+        return 0;
     });
 
     $(function ($) {
