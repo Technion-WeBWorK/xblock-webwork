@@ -12,7 +12,7 @@ Administration
 * Select a problem, specified by path
 * Setting related dates and enforcing them: deadlines, release, etc.
 * Set grade weight (e.g. a unit with 3 problems, one 40 percent the other two 30)
-* "Staff View" of problem (as a certain student) shows the student's cistomized version, all past submissions, scores, and feedback messages
+* "Staff View" of problem (as a certain student) shows the student's customized version, all past submissions, scores, and feedback messages
 
 Problem Setup
 -------------
