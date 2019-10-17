@@ -54,6 +54,6 @@ function WeBWorKXBlock(runtime, element) {
     });
 
     $(function ($) {
-
+        MathJax.Hub.Queue(["Typeset",MathJax.Hub]);
     });
 }

@@ -59,7 +59,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
     icon_class = 'problem'
 
     # ----------- External, editable fields -----------
-    editable_fields = ('ww_server', 'ww_course', 'ww_username', 'ww_password', 'display_name', 'problem', 'max_score', 'max_attempts', 'show_answers')
+    editable_fields = ('ww_server', 'ww_course', 'ww_username', 'ww_password', 'display_name', 'problem', 'max_allowed_score', 'max_attempts', 'show_answers')
 
     ww_server = String(
        display_name = _("WeBWorK server address"),
@@ -103,7 +103,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
         help = _("The path to load the problem from."),
     )
 
-    max_score = Float(
+    max_allowed_score = Float(
         display_name = _("Maximum score"),
         default = 100,
         scope = Scope.settings,
@@ -160,7 +160,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
 
     @staticmethod
     def _problem_from_json(repsonse_json):
-        return repsonse_json["body_part100"] + repsonse_json["body_part300"] + repsonse_json["body_part500"] + repsonse_json["body_part530"] + repsonse_json["body_part550"] + repsonse_json["body_part590"] + repsonse_json["body_part710"]  + repsonse_json["body_part780_optional"] + repsonse_json["body_part790"] + repsonse_json["body_part999"][:-16]
+        return repsonse_json["body_part100"] + repsonse_json["body_part300"] + repsonse_json["body_part500"] + repsonse_json["body_part530"] + repsonse_json["body_part550"] + repsonse_json["body_part590"] + repsonse_json["body_part710"]  + repsonse_json["body_part780_optional"] + repsonse_json["body_part790"] + repsonse_json["body_part999"][:-16] + repsonse_json["head_part200"]
 
     @staticmethod
     def _result_from_json(repsonse_json):
@@ -191,6 +191,12 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
         """
         return self.student_attempts > 0
 
+    def max_score(self):
+        """
+        Get the max score
+        """
+        return self.max_allowed_score
+
     def get_score(self):
         """
         For socring, get the score.
@@ -209,7 +215,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
         """
         return Score(
             earned = self.student_score, 
-            possible = self.max_score
+            possible = self.max_score()
         )
 
     def resource_string(self, path):
@@ -277,6 +283,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
 
                 self.student_answer = request.copy()
                 self.student_attempts += 1
+                response["scored"] = True
 
                 response_parameters = RESPONSE_PARAMETERS_CHECK
 
@@ -368,6 +375,6 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
              """<webwork/>
              """),
             ("WeBWorKXBlock With Parameters",
-             """<webwork display_name="Tester test" problem="Technion/LinAlg/InvMatrix/en/3x3_seq01_calc_invA.pg" max_score="100" max_attempts="1" show_answers="True"/>
+             """<webwork display_name="Tester test" problem="Technion/LinAlg/InvMatrix/en/3x3_seq01_calc_invA.pg" max_allowed_score="100" max_attempts="1" show_answers="True"/>
              """),
         ]
