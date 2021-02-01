@@ -1,6 +1,6 @@
 # Preliminaries
-Here is is assumed the reader have basic experience working with
-linux shell commands, python, vscode sdk and docker containers.
+It is assumed the reader have basic experience working with
+linux shell commands, python, vscode, edx xblocks and docker containers.
 # Prerequisites
 1. Ubuntu + Python + virtualenv
 2. Vscode with python + django + docker extension packs
