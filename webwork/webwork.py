@@ -59,11 +59,28 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
     icon_class = 'problem'
 
     # ----------- External, editable fields -----------
-    editable_fields = ('ww_server', 'ww_course', 'ww_username', 'ww_password', 'display_name', 'problem', 'max_allowed_score', 'max_attempts', 'show_answers')
+    editable_fields = ('ww_server_root', 'ww_server', 'ww_course', 'ww_username', 'ww_password', 'display_name', 'problem', 'max_allowed_score', 'max_attempts', 'show_answers')
 
+    ww_server_root = String(
+       display_name = _("WeBWorK server root address"),
+       # default = _("https://webwork2.technion.ac.il"),
+       default = _("http://localhost:8080"),  # full local docker webwork
+       #default = _("http://webwork"), # docker webwork2 container attached to edx docker network
+       # default = _("http://localhost:3000"),  # standalone local docker webwork
+       scope = Scope.content,
+       help=_("This is the root URL of the webwork server."),
+    )
+
+    # FIXME - ww_server should be a relative address, based on ww_server_root
     ww_server = String(
        display_name = _("WeBWorK server address"),
-       default = _("https://webwork2.technion.ac.il/webwork2/html2xml"),
+       # default = _("https://webwork2.technion.ac.il/webwork2/html2xml"),
+       # Next line is for when working with full local docker webwork
+       default = _("http://localhost:8080/webwork2/html2xml"),
+       # when webwork2 containter is on edx docker network
+       # default = _("http://webwork2/webwork2/html2xml"),
+       # Next line is for when working with local docker StandAlone webwork
+       # default = _("http://localhost:3000/"),       
        scope = Scope.content,
        help=_("This is the full URL of the webwork server."),
     )
@@ -98,7 +115,13 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
 
     problem = String(
         display_name = _("Problem"),
-        default = "Technion/LinAlg/Matrices/en/SplitAsUpperLower.pg",
+        # default = "Technion/LinAlg/Matrices/en/SplitAsUpperLower.pg",
+        # default = "Library/Dartmouth/setMTWCh2S4/problem_5.pg",
+        # Next line is for when working with full local docker webwork
+        default = "SplitAsUpperLower.pg",
+        # default = "part01a.pg",
+        # Next line is for when working with local docker StandAlone webwork
+        # default = "Library/SUNYSB/functionComposition.pg",
         scope = Scope.settings,
         help = _("The path to load the problem from."),
     )
@@ -159,12 +182,26 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
     # ---------- Utils --------------
 
     @staticmethod
-    def _problem_from_json(repsonse_json):
-        return repsonse_json["body_part100"] + repsonse_json["body_part300"] + repsonse_json["body_part500"] + repsonse_json["body_part530"] + repsonse_json["body_part550"] + repsonse_json["body_part590"] + repsonse_json["body_part710"]  + repsonse_json["body_part780_optional"] + repsonse_json["body_part790"] + repsonse_json["body_part999"][:-16] + repsonse_json["head_part200"]
+    def _problem_from_json(response_json):
+        raw_state = response_json["body_part100"] + response_json["body_part300"] + response_json["body_part500"] + response_json["body_part530"] + response_json["body_part550"] + response_json["body_part590"] + response_json["body_part710"]  + response_json["body_part780_optional"] + response_json["body_part790"] + response_json["body_part999"][:-16] + response_json["head_part200"]
+        # rederly standalone - need:
+        #     everything between <body> and </body>
+        # and then the JS loads
+        #     between <!-- JS Loads --> and BEFORE <title>
+
+        # Replace source address where needed
+        # fixed_state = raw_state.replace( "/webwork2_files", self.ww_server_root + "/webwork2_files" )
+        # fixed_state = raw_state.replace( "\"/webwork2_files", "\"https://webwork2.technion.ac.il/webwork2_files" )
+        fixed_state = raw_state.replace( "\"/webwork2_files", "\"http://localhost:8080/webwork2_files" )
+        # Next line is for when working with full local docker webwork
+        # fixed_state = raw_state.replace("\"/webwork2_files", "\"file:///home/guy/WW/webwork2/htdocs" )
+        # FIXME
+        #fixed_state = raw_state.replace( "\"/webwork2_files", "\"" + str(self.ww_server_root) + "/webwork2_files" )
+        return fixed_state
 
     @staticmethod
-    def _result_from_json(repsonse_json):
-        return repsonse_json["body_part300"]
+    def _result_from_json(response_json):
+        return response_json["body_part300"]
     
     @staticmethod
     def _sanitize(request):
@@ -173,6 +210,13 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
                 request.pop(key, None)
 
     def request_webwork(self, params):
+        # html2xml uses HTTP GET
+        # Standalone uses HTTP POST
+        # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
+        # probably need something like date = { params, 'courseID':str(self.ww_course), ... }
+        # remember the URL needs to have :3000/render-api
+        # and outputFormat set to "simple" and format set to "json".
+        # Check by examining form parameters from Rederly UI on "render" call.
         return requests.get(self.ww_server, params=dict(
                 params,
                 courseID=str(self.ww_course),
@@ -187,7 +231,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
     # ----------- Grading -----------
     def has_submitted_answer(self):
         """
-        For scoring, has the user alreadu submitted an answer?
+        For scoring, has the user already submitted an answer?
         """
         return self.student_attempts > 0
 
@@ -205,7 +249,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
 
     def set_score(self, score):
         """
-        For socring, save the score.
+        For scoring, save the score.
         """
         self.student_score = score.earned
 
