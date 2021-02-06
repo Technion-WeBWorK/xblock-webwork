@@ -50,8 +50,9 @@ Change it to your needs when following the instructions
    * You will need to supply a git user and password with access permission.  
    Contact guyts@technion.ac.il or tani@mathnet.technion.ac.il for permission request.
 
-6. Install ofek webwork xblock:
-   > pip install -e xblockpython xblock-sdk/manage.py runserver-webwork
+6. Install Ofek's webwork xblock:
+   > pip install -e xblock  
+   python xblock-sdk/manage.py runserver
 
 7. Create the SQLite Database([3.3.3](https://edx.readthedocs.io/projects/xblock-tutorial/en/latest/getting_started/create_first_xblock.html#create-the-sqlite-database:)).  
 Notice that the first 2 commands and the last one are not Originally listed but mandatory for proper installation
@@ -67,7 +68,7 @@ Notice that the first 2 commands and the last one are not Originally listed but 
     >http://localhost:8000
     
     >![Alt](Webwork-Xblock-Browser-Entry-Page.png)  
-10. Clicking one of the problems (here I took the first one) May typically look like this:  
+10. Clicking one of the problems (here I took the first one), may typically look like this:  
     >![Alt](Webwork-Xblock-Browser-Typical-Problem-Page.png)
 
 # 4.  Debug the webwork-xblock (Django server) with VS-Code
