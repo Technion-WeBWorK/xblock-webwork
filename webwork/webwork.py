@@ -1,8 +1,6 @@
 """
 XBlock that uses WeBWorK's PG grader.
 """
-from __future__ import print_function
-
 import pkg_resources
 import json
 import requests
