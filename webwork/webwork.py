@@ -1,18 +1,18 @@
 """
 XBlock that uses WeBWorK's PG grader.
 """
-import pkg_resources
+import pkg_resources # Used here to return resource name as a string
 import json
-import requests
+import requests # Ease the contact with webwork server via HTTP/1.1 
 import random
 import datetime
-import pytz
+import pytz # python timezone
 
 from xblock.core import XBlock
 from django.utils.translation import ugettext_lazy as _ 
 from xblock.fields import String, Scope, Integer, Dict, Float, Boolean, DateTime
 from xblock.fragment import Fragment
-from webob.response import Response
+from webob.response import Response # Uses WSGI format(Web Server Gateway Interface) over HTTP to contact webwork
 from xblockutils.studio_editable import StudioEditableXBlockMixin
 from xblock.scorable import ScorableXBlockMixin, Score
 
@@ -21,11 +21,12 @@ PARAMETERS = {
     "displayMode": "MathJax",
     "outputformat": "json",
 }
-
+# FIXME  - allow update of answersSubmitted according to user history
 REQUEST_PARAMETERS = dict(PARAMETERS, **{
     "answersSubmitted": "0", 
 })
 
+# FIXME  - Increase by 1 from current answersSubmitted 
 RESPONSE_PARAMETERS_BASE = dict(PARAMETERS, **{
     "psvn" : "54321",
     "showSummary" : "1",
@@ -47,6 +48,18 @@ RESPONSE_PARAMETERS_CORRECT = dict(RESPONSE_PARAMETERS_BASE, **{
 class WeBWorKXBlockError(RuntimeError):
     pass
 
+# TODO consider adding more decorations to XBlock (@XBlock.needs("user")).
+# i.e. other needs/wants such as "user_state"
+# Notice though that documantation is scarse. 
+# I found some useful links below:
+# 1. In module_render.py you can find LMS services by
+#    running a search for "services={".
+# https://github.com/edx/edx-platform/blob/master/lms/djangoapps/courseware/module_render.py
+# 2. General info crom open edx conference
+# https://openedx.atlassian.net/wiki/spaces/AC/pages/161400730/Open+edX+Runtime+XBlock+API
+# 3. The below link to user_service.py might be the source
+# code that sets the "user" service
+# https://github.com/edx/XBlock/blob/d93d0981947c69d0b8d6bae269b131942006bb02/xblock/reference/user_service.py
 @XBlock.needs("user")
 class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
     """
