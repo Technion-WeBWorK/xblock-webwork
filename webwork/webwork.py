@@ -60,6 +60,16 @@ class WeBWorKXBlockError(RuntimeError):
 # 3. The below link to user_service.py might be the source
 # code that sets the "user" service
 # https://github.com/edx/XBlock/blob/d93d0981947c69d0b8d6bae269b131942006bb02/xblock/reference/user_service.py
+# 
+# Needed features:  
+# ----------------
+# 1. attempts_management
+# 2. submission_date_management
+# 3. get_old_answers
+# 4. grade_management
+# ----------------
+# out of which the first 2 are handled (but not tested) and the last
+# ones need to be accomplished
 @XBlock.needs("user")
 class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
     """
@@ -74,9 +84,9 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
 
     ww_server_root = String(
        display_name = _("WeBWorK server root address"),
-       # default = _("https://webwork2.technion.ac.il"),
-       default = _("http://localhost:8080"),  # full local docker webwork
-       #default = _("http://webwork"), # docker webwork2 container attached to edx docker network
+       default = _("https://webwork2.technion.ac.il"),
+       # default = _("http://localhost:8080"),  # full local docker webwork
+       # default = _("http://webwork"), # docker webwork2 container attached to edx docker network
        # default = _("http://localhost:3000"),  # standalone local docker webwork
        scope = Scope.content,
        help=_("This is the root URL of the webwork server."),
@@ -85,9 +95,9 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
     # FIXME - ww_server should be a relative address, based on ww_server_root
     ww_server = String(
        display_name = _("WeBWorK server address"),
-       # default = _("https://webwork2.technion.ac.il/webwork2/html2xml"),
+       default = _("https://webwork2.technion.ac.il/webwork2/html2xml"),
        # Next line is for when working with full local docker webwork
-       default = _("http://localhost:8080/webwork2/html2xml"),
+       # default = _("http://localhost:8080/webwork2/html2xml"),
        # when webwork2 containter is on edx docker network
        # default = _("http://webwork2/webwork2/html2xml"),
        # Next line is for when working with local docker StandAlone webwork
@@ -127,9 +137,9 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
     problem = String(
         display_name = _("Problem"),
         # default = "Technion/LinAlg/Matrices/en/SplitAsUpperLower.pg",
-        # default = "Library/Dartmouth/setMTWCh2S4/problem_5.pg",
+        default = "Library/Dartmouth/setMTWCh2S4/problem_5.pg",
         # Next line is for when working with full local docker webwork
-        default = "SplitAsUpperLower.pg",
+        # default = "SplitAsUpperLower.pg",
         # default = "part01a.pg",
         # Next line is for when working with local docker StandAlone webwork
         # default = "Library/SUNYSB/functionComposition.pg",
@@ -202,8 +212,8 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
 
         # Replace source address where needed
         # fixed_state = raw_state.replace( "/webwork2_files", self.ww_server_root + "/webwork2_files" )
-        # fixed_state = raw_state.replace( "\"/webwork2_files", "\"https://webwork2.technion.ac.il/webwork2_files" )
-        fixed_state = raw_state.replace( "\"/webwork2_files", "\"http://localhost:8080/webwork2_files" )
+        fixed_state = raw_state.replace( "\"/webwork2_files", "\"https://webwork2.technion.ac.il/webwork2_files" )
+        # fixed_state = raw_state.replace( "\"/webwork2_files", "\"http://localhost:8080/webwork2_files" )
         # Next line is for when working with full local docker webwork
         # fixed_state = raw_state.replace("\"/webwork2_files", "\"file:///home/guy/WW/webwork2/htdocs" )
         # FIXME
@@ -398,6 +408,11 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
         Return whether due date has passed.
         """
         try:
+            # The try import clause probably placed here since the import
+            # works only under full devstack Edx environment but
+            # fails under xblock-sdk Edx environment which lacks
+            # the xmodule.
+            # TODO - verify proper work of this method in the devstack build 
             from xmodule.util.duedate import get_extended_due_date
         except ImportError:
             return False

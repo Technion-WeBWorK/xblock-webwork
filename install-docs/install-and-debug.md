@@ -51,8 +51,7 @@ Change it to your needs when following the instructions
    Contact guyts@technion.ac.il or tani@mathnet.technion.ac.il for permission request.
 
 6. Install Ofek's webwork xblock:
-   > pip install -e xblock-webwork  
-   python xblock-sdk/manage.py runserver
+   > pip install -e xblock-webwork
 
 7. Create the SQLite Database([3.3.3](https://edx.readthedocs.io/projects/xblock-tutorial/en/latest/getting_started/create_first_xblock.html#create-the-sqlite-database:)).  
 Notice that the first 2 commands and the last one are not Originally listed but mandatory for proper installation
