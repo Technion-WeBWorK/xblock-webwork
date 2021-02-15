@@ -60,6 +60,16 @@ class WeBWorKXBlockError(RuntimeError):
 # 3. The below link to user_service.py might be the source
 # code that sets the "user" service
 # https://github.com/edx/XBlock/blob/d93d0981947c69d0b8d6bae269b131942006bb02/xblock/reference/user_service.py
+# 
+# Needed features:  
+# ----------------
+# 1. attempts_management
+# 2. submission_date_management
+# 3. get_old_answers
+# 4. grade_management
+# ----------------
+# out of which the first 2 are handled (but not tested) and the last
+# ones need to be accomplished
 @XBlock.needs("user")
 class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
     """
@@ -398,6 +408,11 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
         Return whether due date has passed.
         """
         try:
+            # The try import clause probably placed here since the import
+            # works only under full devstack Edx environment but
+            # fails under xblock-sdk Edx environment which lacks
+            # the xmodule.
+            # TODO - verify proper work of this method in the devstack build 
             from xmodule.util.duedate import get_extended_due_date
         except ImportError:
             return False
