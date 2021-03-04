@@ -1,3 +1,18 @@
+<!--
+Colors convention: a Bootstrap-like color convention is followed see e.g.
+https://www.w3schools.com/bootstrap4/bootstrap_colors.asp
+
+Uncomment these HTML lines to see the effect and
+copy-paste in document up to need
+
+<span style="color:#0275d8">Primary text</span>  
+<span style="color:#5cb85c">Success text</span>  
+<span style="color:#5bc0de">Info text here</span>  
+<span style="color:#f0ad4e">Warning text</span>  
+<span style="color:#d9534f">Danger text</span>  
+<span style="color:#f7f7f7">Faded text</span>  
+-->
+
 # 1. Preliminaries
 This Tutorial should help the reader to install xblock-webwork into Open edX's limited xblock-sdk environment and debug it with VS-Code. Listed below xblock-sdk environment pros-and-cons when compared with Open edX-devstack environment:
 
@@ -32,7 +47,7 @@ Happy ending requires careful follow of the listed steps.
 2. Vscode with python + django + docker extension packs
 3. An activated Full webwork docker container that could be started with the subshell command (replace WW/webwork2 with the correct Webwork path):
     >(cd ~/WW/webwork2/ && docker-compose up -d)
-* to make sure that the local webwork server runs correctly, execute the shell command:
+* To make sure that the local webwork server runs correctly, execute the shell command:
     >firefox --new-window http://localhost:8080/webwork2/admin/
 
 # 3. installing Ofek webwork xblock
@@ -40,15 +55,21 @@ These instructions are based on the Edx instructions here:
 [3.2 Set Up the XBlock Software Development Kit](https://edx.readthedocs.io/projects/xblock-tutorial/en/latest/getting_started/setup_sdk.html)  
 and the following chapter  
 [3.3. Create Your First XBlock](https://edx.readthedocs.io/projects/xblock-tutorial/en/latest/getting_started/setup_sdk.html)   
->Warning: This version does not include debugging webwork-xblock docker container! only Django server debugging.   
-Anyway, a good starting point to accomplish docker container debugging are found in the complement instructions found at devstack-install-and-debug.md 
 
-For practical reasons I set the xblock directory path **<span style="color:grey">XblockEx</span>**.  
+<span style="color: #f0ad4e">**Warning:**  
+    This version does not include debugging webwork-xblock docker container!  
+    It only local Django server debugging.   
+    Anyway, a good starting point to accomplish docker container debugging could be found  
+    in the complement instruction set devstack-install-and-debug.md 
+</span>  
+
+**<span style="color:#0275d8">XblockEx</span>** directory name was selected for practical explanation reasons.  
 Change it to your needs when following the instructions  
 
 1. Activate full webwork container
    >(cd ~/WW/webwork2/ && docker-compose up -d)  
-   *  **<span style="color:grey">/WW/webwork2/</span>** is just my Webwork directory and you should use your own path to this directory
+   *  **<span style="color:#0275d8">/WW/webwork2/</span>**   
+   is just my Webwork directory and you should use your own path to this directory
 
 2. Create the directory:
     > mkdir XblockEx  
@@ -83,11 +104,11 @@ Notice that the first 2 commands and the last one are not Originally listed but 
    > python xblock-sdk/manage.py runserver  
    
 9.  Check it out to work properly in your browser:  
-    >http://localhost:8000
-    
-    >![Alt](Webwork-Xblock-Browser-Entry-Page.png)  
-10. Clicking one of the problems (here I took the first one), may typically look like this:  
-    >![Alt](Webwork-Xblock-Browser-Typical-Problem-Page.png)
+    http://localhost:8000  
+    ![Alt](Webwork-Xblock-Browser-Entry-Page.png)  
+10. Clicking one of the problems (here I took the first one), may 
+    typically look like this:  
+    ![Alt](Webwork-Xblock-Browser-Typical-Problem-Page.png)
 
 # 4.  Debug the webwork-xblock (Django server) with VS-Code
 1. Open your VS-Code
@@ -96,20 +117,21 @@ Notice that the first 2 commands and the last one are not Originally listed but 
 3. Choose the correct venv python interpreter:
    >View -> Command Palette -> Python: Select Interpreter -> Enter interpreter path -> Find..->  
    scroll to ~/XblockEx-> venv -> bin and choose python3.8
-4. Open new terminal with activated venv:
-   >Terminal->New terminal choose new terminal and it will open this terminal with the virtual environment activated:
+4. Open new terminal with activated venv:  
+   > Terminal->New terminal choose new terminal and it will open this terminal with the virtual environment activated:  
+   
    ![Alt](VS-Code-Terminal-with-venv-activated.png)  
 5. Create a basic launch.json file adapted to running Django
    server of the type Python -> Django
    ![Alt](VS-Code-Create-launch.json.png)
 6. This will end with .vscode directory with the basic Python/Django launch.json file inside:  
-   >![Alt](VS-Code-Python-Django-launch.json.png)
+   ![Alt](VS-Code-Python-Django-launch.json.png)
 7. Place breakpoints in some interesting points (./manage.py, ./workbench/views.py, XblockEx/xblock-webwork/webwork/webwork.py):
-   >![Alt](VS-Code-BreakPoints.png) 
+   ![Alt](VS-Code-BreakPoints.png) 
 8. In Run sidebar choose the correct debug configuration (Python: Django) and press the green rectangle (F5 will equally work):  
-   >![Alt](VS-Code-Debug.png) 
+   ![Alt](VS-Code-Debug.png) 
 9. Open the browser at http://127.0.0.1:8000/  
    and notice the interaction of the browser actions with your breakpoints
 10. You are ready to develop/debug process of this project.
 
-**Happy debugging**
+<span style="color:#5cb85c">**Happy debugging**</span>
