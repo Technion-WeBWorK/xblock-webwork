@@ -103,17 +103,33 @@ Change it to your needs when following the instructions
     + Open docker-compose.yml with VS-Code or nano
     + Navigate in the file Under the line of  
       lms: 
-    + replace the long bash command into:  
+      > replace (comment the previous for backup) the long bash command into:  
+        > 
+          lms:  
+            command: >
+              bash -c '
+              source /edx/app/edxapp/edxapp_env && 
+              pip install ptvsd && 
+              pip install /edx/app/edxapp/edx-platform/src/xblock-webwork/ && 
+              echo "tani-123" && 
+              while true; do python /edx/app/edxapp/edx-platform/manage.py 
+              lms runserver 0.0.0.0:18000 --settings devstack_docker;
+              sleep 2; done'
 
-      lms:  
-         command: bash -c 'source /edx/app/edxapp/edxapp_env && echo "tani123" && cd /edx/app/edxapp/edx-platform && pip install src/xblock-webwork/ && while true; do python /edx/app/edxapp/edx-platform/manage.py lms runserver 0.0.0.0:18000 --settings devstack_docker; sleep 2; done'  
-         \# command: bash -c 'source /edx/app/edxapp/edxapp_env && while true; do python /edx/app/edxapp/edx-platform/manage.py lms runserver 0.0.0.0:18000 --settings devstack_docker; sleep 2; done'
     + repeat equivalent change with studio - navigate Under the line of studio: 
-    + replace the long bash command into:  
+      > replace (comment the previous for backup) the long bash command into:  
+        > 
+          studio:
+            command: >
+              bash -c '
+              source /edx/app/edxapp/edxapp_env && 
+              pip install ptvsd && 
+              pip install /edx/app/edxapp/edx-platform/src/xblock-webwork/ && 
+              echo "tani-456" && 
+              while true; do python /edx/app/edxapp/edx-platform/manage.py cms 
+              runserver 0.0.0.0:18010 --settings devstack_docker; 
+              sleep 2; done'
 
-      studio:  
-         command: bash -c 'source /edx/app/edxapp/edxapp_env && echo "tani456" && cd /edx/app/edxapp/edx-platform && pip install src/xblock-webwork/ && while true; do python /edx/app/edxapp/edx-platform/manage.py cms runserver 0.0.0.0:18010 --settings devstack_docker; sleep 2; done'  
-         \# command: bash -c 'source /edx/app/edxapp/edxapp_env && while true; do python /edx/app/edxapp/edx-platform/manage.py cms runserver 0.0.0.0:18010 --settings devstack_docker; sleep 2; done'
     + Save and exit
     + Finally, check the docker-compose.yml update with the parenthesized=subshell command 
        > (cd ~/XblockEx/edx-devstack/devstack/ && make dev.up)  
@@ -226,7 +242,7 @@ to set debug capabilities for the STUDIO
 
 4. To test proper attachment of VS-Code to the LMS container:   
     + Open some wanted file in VS-Code for example
-    + /edx/app/edxapp/edx-platform/lms/djangoapps/courseware/preview.py
+    + /edx/app/edxapp/edx-platform/cms/djangoapps/contentstore/views/preview.py
     + Insert a breakpoint at a wanted place (here line 322):
       
     + Now open the browser in http://localhost:18000/dashboard and navigate/click  

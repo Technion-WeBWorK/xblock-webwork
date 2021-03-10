@@ -1,15 +1,15 @@
 """
 XBlock that uses WeBWorK's PG grader.
 """
-import pkg_resources # Used here to return resource name as a string
 import json
-import requests # Ease the contact with webwork server via HTTP/1.1 
 import random
 import datetime
+import logging
+import requests # Ease the contact with webwork server via HTTP/1.1
+import pkg_resources # Used here to return resource name as a string
 import pytz # python timezone
-
 from xblock.core import XBlock
-from django.utils.translation import ugettext_lazy as _ 
+from django.utils.translation import ugettext_lazy as _
 from xblock.fields import String, Scope, Integer, Dict, Float, Boolean, DateTime
 from xblock.fragment import Fragment
 from webob.response import Response # Uses WSGI format(Web Server Gateway Interface) over HTTP to contact webwork
@@ -23,14 +23,14 @@ PARAMETERS = {
 }
 # FIXME  - allow update of answersSubmitted according to user history
 REQUEST_PARAMETERS = dict(PARAMETERS, **{
-    "answersSubmitted": "0", 
+    "answersSubmitted": "0",
 })
 
-# FIXME  - Increase by 1 from current answersSubmitted 
+# FIXME  - Increase by 1 from current answersSubmitted
 RESPONSE_PARAMETERS_BASE = dict(PARAMETERS, **{
     "psvn" : "54321",
     "showSummary" : "1",
-    "answersSubmitted": "1", 
+    "answersSubmitted": "1",
 })
 
 RESPONSE_PARAMETERS_CHECK = dict(RESPONSE_PARAMETERS_BASE, **{
@@ -50,7 +50,7 @@ class WeBWorKXBlockError(RuntimeError):
 
 # TODO consider adding more decorations to XBlock (@XBlock.needs("user")).
 # i.e. other needs/wants such as "user_state"
-# Notice though that documantation is scarse. 
+# Notice though that documantation is scarse.
 # I found some useful links below:
 # 1. In module_render.py you can find LMS services by
 #    running a search for "services={".
@@ -60,8 +60,8 @@ class WeBWorKXBlockError(RuntimeError):
 # 3. The below link to user_service.py might be the source
 # code that sets the "user" service
 # https://github.com/edx/XBlock/blob/d93d0981947c69d0b8d6bae269b131942006bb02/xblock/reference/user_service.py
-# 
-# Needed features:  
+#
+# Needed features:
 # ----------------
 # 1. attempts_management
 # 2. submission_date_management
@@ -80,7 +80,10 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
     icon_class = 'problem'
 
     # ----------- External, editable fields -----------
-    editable_fields = ('ww_server_root', 'ww_server', 'ww_course', 'ww_username', 'ww_password', 'display_name', 'problem', 'max_allowed_score', 'max_attempts', 'show_answers')
+    editable_fields = (
+        'ww_server_root', 'ww_server', 'ww_course', 'ww_username', 'ww_password',
+        'display_name', 'problem', 'max_allowed_score', 'max_attempts', 'show_answers'
+        )
 
     ww_server_root = String(
        display_name = _("WeBWorK server root address"),
@@ -101,7 +104,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
        # when webwork2 containter is on edx docker network
        # default = _("http://webwork2/webwork2/html2xml"),
        # Next line is for when working with local docker StandAlone webwork
-       # default = _("http://localhost:3000/"),       
+       # default = _("http://localhost:3000/"),
        scope = Scope.content,
        help=_("This is the full URL of the webwork server."),
     )
@@ -118,7 +121,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
        default = _("daemon"),
        scope = Scope.content,
        help=_("This is the username to use when interfacing with the webwork server."),
-    ) 
+    )
 
     ww_password = String(
        display_name = _("WeBWorK password"),
@@ -204,7 +207,13 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
 
     @staticmethod
     def _problem_from_json(response_json):
-        raw_state = response_json["body_part100"] + response_json["body_part300"] + response_json["body_part500"] + response_json["body_part530"] + response_json["body_part550"] + response_json["body_part590"] + response_json["body_part710"]  + response_json["body_part780_optional"] + response_json["body_part790"] + response_json["body_part999"][:-16] + response_json["head_part200"]
+        raw_state = \
+            response_json["body_part100"] + response_json["body_part300"] + \
+            response_json["body_part500"] + response_json["body_part530"] + \
+            response_json["body_part550"] + response_json["body_part590"] + \
+            response_json["body_part710"] + response_json["body_part780_optional"] + \
+            response_json["body_part790"] + response_json["body_part999"][:-16] + \
+            response_json["head_part200"]
         # rederly standalone - need:
         #     everything between <body> and </body>
         # and then the JS loads
@@ -223,10 +232,13 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
     @staticmethod
     def _result_from_json(response_json):
         return response_json["body_part300"]
-    
+
     @staticmethod
     def _sanitize(request):
-        for action in (REQUEST_PARAMETERS, RESPONSE_PARAMETERS_CORRECT, RESPONSE_PARAMETERS_PREVIEW, RESPONSE_PARAMETERS_CHECK):
+        for action in (
+            REQUEST_PARAMETERS, RESPONSE_PARAMETERS_CORRECT,
+            RESPONSE_PARAMETERS_PREVIEW, RESPONSE_PARAMETERS_CHECK
+            ):
             for key in action:
                 request.pop(key, None)
 
@@ -279,7 +291,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
         For scoring, calculate the score.
         """
         return Score(
-            earned = self.student_score, 
+            earned = self.student_score,
             possible = self.max_score()
         )
 
@@ -298,7 +310,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
         """
         if not self.seed:
             self.seed = random.randint(1,2**31-1)
-        
+
         if not self.psvn:
             self.psvn = random.randint(1,500)
 
@@ -310,7 +322,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
         # hide the show answers button
         if not self.show_answers:
             form += "<style> input[name='WWcorrectAns']{display: none !important;}</style>"
-    
+
         html = self.resource_string("static/html/webwork.html")
         frag = Fragment(html.format(self=self,form=form))
         frag.add_css(self.resource_string("static/css/webwork.css"))
@@ -334,9 +346,10 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
 
         try:
             # Copy the request
+            logging.info('Guy-submit_webwork')
             request = request_original.json.copy()
             self._sanitize(request)
-            
+
             # Handle check answer
             if request["submit_type"] == "WWsubmit":
 
@@ -372,11 +385,11 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
 
             webwork_response = self.request_webwork(request)
             response["data"] = self._result_from_json(webwork_response)
-            
+
             if response["scored"]:
                 self.student_score = webwork_response["score"]
                 response["score"] = self.student_score
-            
+
             response['success'] = True
             response['message'] = "Success!"
 
@@ -384,11 +397,11 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
             response['message'] = e.message
 
         return Response(
-                body = json.dumps(response), 
+                text = json.dumps(response),
                 content_type =  "application/json",
                 status = 200,
             )
-        
+
 
     # ---------- Due Date ----------
     def utcnow():
@@ -412,7 +425,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
             # works only under full devstack Edx environment but
             # fails under xblock-sdk Edx environment which lacks
             # the xmodule.
-            # TODO - verify proper work of this method in the devstack build 
+            # TODO - verify proper work of this method in the devstack build
             from xmodule.util.duedate import get_extended_due_date
         except ImportError:
             return False
@@ -445,6 +458,8 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
              """<webwork/>
              """),
             ("WeBWorKXBlock With Parameters",
-             """<webwork display_name="Tester test" problem="Technion/LinAlg/InvMatrix/en/3x3_seq01_calc_invA.pg" max_allowed_score="100" max_attempts="1" show_answers="True"/>
+             """<webwork display_name="Tester test"
+             problem="Technion/LinAlg/InvMatrix/en/3x3_seq01_calc_invA.pg"
+             max_allowed_score="100" max_attempts="1" show_answers="True"/>
              """),
         ]
