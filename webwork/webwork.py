@@ -4,7 +4,6 @@ XBlock that uses WeBWorK's PG grader.
 import json
 import random
 import datetime
-import logging
 import requests # Ease the contact with webwork server via HTTP/1.1
 import pkg_resources # Used here to return resource name as a string
 import pytz # python timezone
@@ -15,6 +14,12 @@ from xblock.fragment import Fragment
 from webob.response import Response # Uses WSGI format(Web Server Gateway Interface) over HTTP to contact webwork
 from xblockutils.studio_editable import StudioEditableXBlockMixin
 from xblock.scorable import ScorableXBlockMixin, Score
+import six
+from xblock.completable import XBlockCompletionMode
+try:
+    from submissions import api as sub_api
+except ImportError:
+    sub_api = None  # We are probably in the workbench. Don't use the submissions API
 
 PARAMETERS = {
     "language": "en",
@@ -48,14 +53,96 @@ RESPONSE_PARAMETERS_CORRECT = dict(RESPONSE_PARAMETERS_BASE, **{
 class WeBWorKXBlockError(RuntimeError):
     pass
 
+class StudentViewUserStateMixin:
+    """
+    This class has been copy-pasted from the problem-builder xblock file mixins.py
+    it provides student_view_user_state view.
+
+    To prevent unnecessary overloading of the build_user_state_data method,
+    you may specify `USER_STATE_FIELDS` to customize build_user_state_data
+    and student_view_user_state output.
+    """
+    NESTED_BLOCKS_KEY = "components"
+    INCLUDE_SCOPES = (Scope.user_state, Scope.user_info, Scope.preferences)
+    USER_STATE_FIELDS = []
+
+    def transforms(self):
+        """
+        Return a dict where keys are fields to transform, and values are
+        transform functions that accept a value to to transform as the
+        only argument.
+        """
+        return {}
+
+    def build_user_state_data(self, context=None):
+        """
+        Returns a dictionary of the student data of this XBlock,
+        retrievable from the student_view_user_state XBlock handler.
+        """
+
+        result = {}
+        transforms = self.transforms()
+        for _, field in six.iteritems(self.fields):
+            # Only insert fields if their scopes and field names match
+            if field.scope in self.INCLUDE_SCOPES and field.name in self.USER_STATE_FIELDS:
+                transformer = transforms.get(field.name, lambda value: value)
+                result[field.name] = transformer(field.read_from(self))
+
+        if getattr(self, "has_children", False):
+            components = {}
+            for child_id in self.children:
+                child = self.runtime.get_block(child_id)
+                if hasattr(child, 'build_user_state_data'):
+                    components[str(child_id)] = child.build_user_state_data(context)
+
+            result[self.NESTED_BLOCKS_KEY] = components
+
+        return result
+
+    @XBlock.handler
+    def student_view_user_state(self, context=None, suffix=''):
+        """
+        Returns a JSON representation of the student data of this XBlock.
+        """
+        result = self.build_user_state_data(context)
+        json_result = json.dumps(result, cls=DateTimeEncoder)
+
+        return webob.response.Response(
+            body=json_result.encode('utf-8'),
+            content_type='application/json'
+        )
+
+class SubmittingXBlockMixin:
+    """
+    This class has been copy-pasted from the problem-builder xblock
+    It Simplifies the use of edX "submissions API" 
+    within the Webwork XBlock
+    """
+    completion_mode = XBlockCompletionMode.COMPLETABLE
+    has_score = True
+
+    @property
+    def student_item_key(self):
+        """
+        Get the student_item_dict required for the submissions API.
+        """
+        assert sub_api is not None
+        location = self.location.replace(branch=None, version=None)  # Standardize the key in case it isn't already
+        return dict(
+            student_id=self.runtime.anonymous_student_id,
+            course_id=six.text_type(location.course_key),
+            item_id=six.text_type(location),
+            item_type=self.scope_ids.block_type,
+        )
+
 # TODO consider adding more decorations to XBlock (@XBlock.needs("user")).
 # i.e. other needs/wants such as "user_state"
-# Notice though that documantation is scarse.
+# Notice though that documentation is scarce.
 # I found some useful links below:
 # 1. In module_render.py you can find LMS services by
 #    running a search for "services={".
 # https://github.com/edx/edx-platform/blob/master/lms/djangoapps/courseware/module_render.py
-# 2. General info crom open edx conference
+# 2. General info from open edx conference
 # https://openedx.atlassian.net/wiki/spaces/AC/pages/161400730/Open+edX+Runtime+XBlock+API
 # 3. The below link to user_service.py might be the source
 # code that sets the "user" service
@@ -70,14 +157,18 @@ class WeBWorKXBlockError(RuntimeError):
 # ----------------
 # out of which the first 2 are handled (but not tested) and the last
 # ones need to be accomplished
+
 @XBlock.needs("user")
-class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
+class WeBWorKXBlock(
+    ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin,
+    SubmittingXBlockMixin, StudentViewUserStateMixin):
     """
     XBlock that uses WeBWorK's PG grader.
     """
 
     # Makes LMS icon appear as a problem
     icon_class = 'problem'
+    category = 'ww-problem'
 
     # ----------- External, editable fields -----------
     editable_fields = (
@@ -196,12 +287,11 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
         help = _("Problem set version number, used to seed multi-part problems"),
     )
 
-    student_score = Integer(
+    student_score = Float(
         default = 0,
         scope = Scope.user_state,
         help = _("The student's score"),
     )
-
 
     # ---------- Utils --------------
 
@@ -214,17 +304,16 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
             response_json["body_part710"] + response_json["body_part780_optional"] + \
             response_json["body_part790"] + response_json["body_part999"][:-16] + \
             response_json["head_part200"]
-        # rederly standalone - need:
+        # Rederly standalone - need:
         #     everything between <body> and </body>
         # and then the JS loads
         #     between <!-- JS Loads --> and BEFORE <title>
 
         # Replace source address where needed
-        # fixed_state = raw_state.replace( "/webwork2_files", self.ww_server_root + "/webwork2_files" )
         fixed_state = raw_state.replace( "\"/webwork2_files", "\"https://webwork2.technion.ac.il/webwork2_files" )
-        # fixed_state = raw_state.replace( "\"/webwork2_files", "\"http://localhost:8080/webwork2_files" )
-        # Next line is for when working with full local docker webwork
-        # fixed_state = raw_state.replace("\"/webwork2_files", "\"file:///home/guy/WW/webwork2/htdocs" )
+-       # fixed_state = raw_state.replace( "\"/webwork2_files", "\"http://localhost:8080/webwork2_files" )
+-       # Next line is for when working with full local docker webwork
+-       # fixed_state = raw_state.replace("\"/webwork2_files", "\"file:///home/guy/WW/webwork2/htdocs" )
         # FIXME
         #fixed_state = raw_state.replace( "\"/webwork2_files", "\"" + str(self.ww_server_root) + "/webwork2_files" )
         return fixed_state
@@ -262,38 +351,43 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
 
 
     # ----------- Grading -----------
+    """
+     The parent class ScorableXBlockMixin demands to define the methods 
+     has_submitted_answer(), get_score(), set_score(), calculate_score()
+    """ 
     def has_submitted_answer(self):
         """
         For scoring, has the user already submitted an answer?
         """
         return self.student_attempts > 0
 
+    def get_score(self):
+        """
+        For socring, get the score.
+        """
+        return self.CurrentScore
+
+    def set_score(self, score):
+        """
+        score type must be of of type Score
+        This method sets WeBWorKXBlock student_score and CurrentScore fields.
+        student_score is a webwork-problem database field to be saved
+        CurrentScore is a ScorableXBlockMixin defined tuple.
+        this field is needed for the "must be implemented in a child class"
+        methods: calculate_score() and get_score()
+        """
+        assert type(score) == Score
+        self.student_score = float(score.raw_earned)
+        self.CurrentScore = score
+
+    def calculate_score(self):
+        return self.CurrentScore
+
     def max_score(self):
         """
         Get the max score
         """
         return self.max_allowed_score
-
-    def get_score(self):
-        """
-        For socring, get the score.
-        """
-        return self.student_score
-
-    def set_score(self, score):
-        """
-        For scoring, save the score.
-        """
-        self.student_score = score.earned
-
-    def calculate_score(self):
-        """
-        For scoring, calculate the score.
-        """
-        return Score(
-            earned = self.student_score,
-            possible = self.max_score()
-        )
 
     def resource_string(self, path):
         """
@@ -303,7 +397,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
         return data.decode("utf8")
 
     # ----------- View -----------
-    def student_view(self, context=None):
+    def student_view(self, context=None, show_detailed_errors=False):
         """
         The primary view of the XBlock, shown to students
         when viewing courses.
@@ -338,7 +432,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
         """
         response = {
             'success': False,
-            'message': "Unexpected error occured!",
+            'message': "Unexpected error occurred!",
             'data': '',
             'score': '',
             'scored': False
@@ -346,7 +440,6 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
 
         try:
             # Copy the request
-            logging.info('Guy-submit_webwork')
             request = request_original.json.copy()
             self._sanitize(request)
 
@@ -378,20 +471,39 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
                 response_parameters = RESPONSE_PARAMETERS_PREVIEW
 
             else:
-                raise WeBWorKXBlockError("Unkown submit button used")
+                raise WeBWorKXBlockError("Unknown submit button used")
 
             # Looks good! Send the data to WeBWorK
             request.update(response_parameters)
 
             webwork_response = self.request_webwork(request)
+            # This is the "answer" that is documented in the mysql DB tables.
+            # TODO: We need to build a better JSON object to store
             response["data"] = self._result_from_json(webwork_response)
 
             if response["scored"]:
-                self.student_score = webwork_response["score"]
-                response["score"] = self.student_score
+                score = Score(raw_earned = webwork_response["score"], raw_possible = self.max_score())
+                self.set_score(score)
+                response["score"] = self.CurrentScore.raw_earned
 
             response['success'] = True
             response['message'] = "Success!"
+
+            # Create a submission entry at courseware_studentmodule mysql57 table
+            if sub_api:
+                # Also send to the submissions API:
+                sub_api.create_submission(self.student_item_key, response)
+
+            self.runtime.publish(self, 'grade', {
+                'value': self.CurrentScore.raw_earned,
+                'max_value': self.CurrentScore.raw_possible,
+            })
+
+            self.runtime.publish(self, 'xblock.webwork.submitted', {
+                'num_attempts': self.student_attempts,
+                'submitted_answer': response["data"],
+                'grade': self.student_score,
+            })
 
         except WeBWorKXBlockError as e:
             response['message'] = e.message
@@ -443,7 +555,7 @@ class WeBWorKXBlock(ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin):
             close_date = due
 
         if close_date is not None:
-            return utcnow() > close_date
+            return datetime.datetime.now(datetime.timezone.utc) > close_date
         return False
 
 
