@@ -21,6 +21,14 @@ try:
 except ImportError:
     sub_api = None  # We are probably in the workbench. Don't use the submissions API
 
+WWSERVERLIST = {
+    'TechnionFullWW':'https://webwork2.technion.ac.il/webwork2/html2xml',
+    'LocalStandAloneWW':'http://WWStandAlone:3000/render-api',
+}
+
+# SERVER = 'TechnionFullWW'
+SERVER = 'LocalStandAloneWW'
+
 PARAMETERS = {
     "language": "en",
     "displayMode": "MathJax",
@@ -135,29 +143,6 @@ class SubmittingXBlockMixin:
             item_type=self.scope_ids.block_type,
         )
 
-# TODO consider adding more decorations to XBlock (@XBlock.needs("user")).
-# i.e. other needs/wants such as "user_state"
-# Notice though that documentation is scarce.
-# I found some useful links below:
-# 1. In module_render.py you can find LMS services by
-#    running a search for "services={".
-# https://github.com/edx/edx-platform/blob/master/lms/djangoapps/courseware/module_render.py
-# 2. General info from open edx conference
-# https://openedx.atlassian.net/wiki/spaces/AC/pages/161400730/Open+edX+Runtime+XBlock+API
-# 3. The below link to user_service.py might be the source
-# code that sets the "user" service
-# https://github.com/edx/XBlock/blob/d93d0981947c69d0b8d6bae269b131942006bb02/xblock/reference/user_service.py
-#
-# Needed features:
-# ----------------
-# 1. attempts_management
-# 2. submission_date_management
-# 3. get_old_answers
-# 4. grade_management
-# ----------------
-# out of which the first 2 are handled (but not tested) and the last
-# ones need to be accomplished
-
 @XBlock.needs("user")
 class WeBWorKXBlock(
     ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin,
@@ -172,30 +157,13 @@ class WeBWorKXBlock(
 
     # ----------- External, editable fields -----------
     editable_fields = (
-        'ww_server_root', 'ww_server', 'ww_course', 'ww_username', 'ww_password',
+        'ww_server', 'ww_course', 'ww_username', 'ww_password',
         'display_name', 'problem', 'max_allowed_score', 'max_attempts', 'show_answers'
         )
 
-    ww_server_root = String(
-       display_name = _("WeBWorK server root address"),
-       default = _("https://webwork2.technion.ac.il"),
-       # default = _("http://localhost:8080"),  # full local docker webwork
-       # default = _("http://webwork"), # docker webwork2 container attached to edx docker network
-       # default = _("http://localhost:3000"),  # standalone local docker webwork
-       scope = Scope.content,
-       help=_("This is the root URL of the webwork server."),
-    )
-
-    # FIXME - ww_server should be a relative address, based on ww_server_root
     ww_server = String(
        display_name = _("WeBWorK server address"),
-       default = _("https://webwork2.technion.ac.il/webwork2/html2xml"),
-       # Next line is for when working with full local docker webwork
-       # default = _("http://localhost:8080/webwork2/html2xml"),
-       # when webwork2 containter is on edx docker network
-       # default = _("http://webwork2/webwork2/html2xml"),
-       # Next line is for when working with local docker StandAlone webwork
-       # default = _("http://localhost:3000/"),
+       default = _(WWSERVERLIST[SERVER]),
        scope = Scope.content,
        help=_("This is the full URL of the webwork server."),
     )
@@ -310,12 +278,12 @@ class WeBWorKXBlock(
         #     between <!-- JS Loads --> and BEFORE <title>
 
         # Replace source address where needed
-        fixed_state = raw_state.replace( "\"/webwork2_files", "\"https://webwork2.technion.ac.il/webwork2_files" )
--       # fixed_state = raw_state.replace( "\"/webwork2_files", "\"http://localhost:8080/webwork2_files" )
--       # Next line is for when working with full local docker webwork
--       # fixed_state = raw_state.replace("\"/webwork2_files", "\"file:///home/guy/WW/webwork2/htdocs" )
-        # FIXME
-        #fixed_state = raw_state.replace( "\"/webwork2_files", "\"" + str(self.ww_server_root) + "/webwork2_files" )
+        if SERVER == 'TechnionFullWW':
+            fixed_state = raw_state.replace(
+                 "\"/webwork2_files", "\"https://webwork2.technion.ac.il/webwork2_files" )
+        else:
+            fixed_state = raw_state
+
         return fixed_state
 
     @staticmethod
@@ -371,7 +339,7 @@ class WeBWorKXBlock(
         """
         score type must be of of type Score
         This method sets WeBWorKXBlock student_score and CurrentScore fields.
-        student_score is a webwork-problem database field to be saved
+        student_score is a webwork-problem database field to be saved.
         CurrentScore is a ScorableXBlockMixin defined tuple.
         this field is needed for the "must be implemented in a child class"
         methods: calculate_score() and get_score()
