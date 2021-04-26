@@ -265,13 +265,7 @@ class WeBWorKXBlock(
 
     @staticmethod
     def _problem_from_json(response_json):
-        raw_state = \
-            response_json["body_part100"] + response_json["body_part300"] + \
-            response_json["body_part500"] + response_json["body_part530"] + \
-            response_json["body_part550"] + response_json["body_part590"] + \
-            response_json["body_part710"] + response_json["body_part780_optional"] + \
-            response_json["body_part790"] + response_json["body_part999"][:-16] + \
-            response_json["head_part200"]
+
         # Rederly standalone - need:
         #     everything between <body> and </body>
         # and then the JS loads
@@ -279,10 +273,20 @@ class WeBWorKXBlock(
 
         # Replace source address where needed
         if SERVER == 'TechnionFullWW':
+            raw_state = \
+                response_json["body_part100"] + response_json["body_part300"] + \
+                response_json["body_part500"] + response_json["body_part530"] + \
+                response_json["body_part550"] + response_json["body_part590"] + \
+                response_json["body_part710"] + response_json["body_part780_optional"] + \
+                response_json["body_part790"] + response_json["body_part999"][:-16] + \
+                response_json["head_part200"]            
             fixed_state = raw_state.replace(
                  "\"/webwork2_files", "\"https://webwork2.technion.ac.il/webwork2_files" )
         else:
-            fixed_state = raw_state
+            raw_state = str(response_json.content)
+            fixed_state = raw_state.replace(
+                '/webwork2_files', 'http://WWStandAlone:3000/webwork2_files')
+
 
         return fixed_state
 
@@ -307,16 +311,28 @@ class WeBWorKXBlock(
         # remember the URL needs to have :3000/render-api
         # and outputFormat set to "simple" and format set to "json".
         # Check by examining form parameters from Rederly UI on "render" call.
-        return requests.get(self.ww_server, params=dict(
-                params,
-                courseID=str(self.ww_course),
-                userID=str(self.ww_username),
-                course_password=str(self.ww_password),
-                problemSeed=str(self.seed),
-                psvn=str(self.psvn),
-                sourceFilePath=str(self.problem)
-            )).json()
-
+        if SERVER == 'TechnionFullWW':
+            return requests.get(self.ww_server, params=dict(
+                    params,
+                    courseID=str(self.ww_course),
+                    userID=str(self.ww_username),
+                    course_password=str(self.ww_password),
+                    problemSeed=str(self.seed),
+                    psvn=str(self.psvn),
+                    sourceFilePath=str(self.problem)
+                )).json()
+        else:
+            return requests.post(self.ww_server, params=dict(
+                    params,
+                    courseID=str(self.ww_course),
+                    userID=str(self.ww_username),
+                    course_password=str(self.ww_password),
+                    problemSeed=str(self.seed),
+                    psvn=str(self.psvn),
+                    format='json',
+                    outputformat="simple",
+                    sourceFilePath=str(self.problem)
+                ))
 
     # ----------- Grading -----------
     """
