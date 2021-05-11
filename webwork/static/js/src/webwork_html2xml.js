@@ -19,9 +19,9 @@
 
 function WeBWorKXBlock(runtime, element) {
 
-    var handlerUrl = runtime.handlerUrl(element, 'submit_webwork');
+    var handlerUrl = runtime.handlerUrl(element, 'submit_webwork_html2xml');
 
-    function handleResopnse(result) {
+    function handleResponse(result) {
         $("#edx_message").html("")
         $("#edx_webwork_result").html("")
         if (result.success){
@@ -46,8 +46,8 @@ function WeBWorKXBlock(runtime, element) {
             type: "POST",
             url: handlerUrl,
             data: JSON.stringify(form_data),
-            success: handleResopnse,
-            error: handleResopnse
+            success: handleResponse,
+            error: handleResponse
         });
         return 0;
     });
