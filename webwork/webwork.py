@@ -193,11 +193,37 @@ class WeBWorKXBlock(
     icon_class = 'problem'
     category = 'ww-problem'
 
+    def get_server_id_options(self):
+        """
+        BLAH
+        """
+        return self.course.other_course_settings.get('webwork_settings', {}).get('server_list', [])
+
+
     # ----------- External, editable fields -----------
     editable_fields = (
         'ww_server_type', 'ww_server', 'ww_course', 'ww_username', 'ww_password',
         'display_name', 'problem', 'max_allowed_score', 'max_attempts', 'show_answers'
         )
+
+    settings_type = Integer(
+       display_name = _("Settings type"),
+       scope = Scope.settings,
+       values=[
+            {"display_name": "Provided by course via \"Other Course Settings\"", "value": 1},
+            {"display_name": "Manual settings", "value": 2},
+       ],
+       default = 1,
+       help=_("ID of server - should have a record in the Other course settings dictionary - see the documentation"),
+    )
+
+    ww_server_id = String(
+       display_name = _("ID of server"),
+       scope = Scope.settings,
+       #values = get_server_id_options,
+       default = None,
+       help=_("ID of server - should have a record in the Other course settings dictionary - see the documentation"),
+    )
 
     ww_server_type = String(
        display_name = _("Type of server (html2xml or standalone)"),
@@ -212,6 +238,7 @@ class WeBWorKXBlock(
 
     ww_server = String(
        display_name = _("WeBWorK server address"),
+       # FIXME - this should depend on a main course setting
        default = _(WWSERVERLIST[SERVER]),
        scope = Scope.content,
        help=_("This is the full URL of the webwork server."),
@@ -856,6 +883,18 @@ class WeBWorKXBlock(
             return datetime.datetime.now(datetime.timezone.utc) > close_date
         return False
 
+
+    def studio_view(self, context):
+        """
+        Get Studio View fragment
+        """
+        fragment = super().studio_view(context)
+
+        fragment.add_javascript(self.resource_string("static/js/xblock_studio_view.js"))
+
+        fragment.initialize_js('WebWorkXBlockInitStudio')
+
+        return fragment
 
     # ----------- Extras -----------
     @staticmethod
