@@ -10,7 +10,8 @@ import six
 import pytz # python timezone
 from xblock.core import XBlock
 from django.utils.translation import ugettext_lazy as _
-from xblock.fields import String, Scope, Integer, Dict, Float, Boolean, DateTime, UNIQUE_ID
+from xblock.fields import String, Scope, Integer, List, Dict, Float, Boolean, DateTime, UNIQUE_ID
+from xblock.validation import ValidationMessage
 from web_fragments.fragment import Fragment
 from webob.response import Response # Uses WSGI format(Web Server Gateway Interface) over HTTP to contact webwork
 from xblockutils.studio_editable import StudioEditableXBlockMixin
@@ -200,7 +201,11 @@ class WeBWorKXBlock(
 
     ww_server_type = String(
        display_name = _("Type of server (html2xml or standalone)"),
-       scope = Scope.content,
+       scope = Scope.settings,
+       values=[
+            {"display_name": "standalone renderer", "value": "standalone"},
+            {"display_name": "html2xml interface on a regular server", "value": "html2xml"},
+       ],
        default = _(SERVERTYPE),
        help=_("This is the type of webwork server rendering and grading the problems (html2xml or standalone)."),
     )
@@ -274,6 +279,41 @@ class WeBWorKXBlock(
         help = _("Allow students to view correct answers?"),
     )
 
+    custom_parameters = List(
+        # FIXME
+        display_name=_("Custom Parameters"),
+        help=_("Add the key/value pair for any custom parameters. Ex. [\"setting1=71\", \"setting2=white\"]"),
+        scope=Scope.settings
+    )
+
+    iframe_min_height = Integer(
+        display_name=_("Iframe Minimum Height"),
+        help=_(
+            "Enter the desired minimum pixel height of the iframe which will contain the problem. "
+        ),
+        default=50,
+        scope=Scope.settings
+    )
+
+    iframe_max_height = Integer(
+        display_name=_("Iframe Maximum Height"),
+        help=_(
+            "Enter the desired maximum pixel height of the iframe which will contain the problem. "
+        ),
+        default=500,
+        scope=Scope.settings
+    )
+
+    iframe_min_width = Integer(
+        display_name=_("Iframe Minimum Width"),
+        help=_(
+            "Enter the desired minimum pixel width of the iframe which will contain the problem. "
+        ),
+        default=500,
+        scope=Scope.settings
+    )
+
+
     # ----------- Internal student fields -----------
     student_answer = Dict(
         default = None,
@@ -313,6 +353,22 @@ class WeBWorKXBlock(
         scope = Scope.user_state,
         help = _("A runtime unique ID for this instance of this XBlock."),
     )
+
+
+
+    def validate_field_data(self, validation, data):
+        if not isinstance(data.custom_parameters, list):
+            _ = self.runtime.service(self, "i18n").ugettext
+            validation.add(ValidationMessage(ValidationMessage.ERROR, str(
+                _("Custom Parameters must be a list")
+            )))
+
+    @property
+    def course(self):
+        """
+        Return course by course id.
+        """
+        return self.runtime.modulestore.get_course(self.runtime.course_id)
 
 
     # ---------- Utils --------------
@@ -521,8 +577,18 @@ class WeBWorKXBlock(
            ).replace( "\"", "&quot;" )  # srcdoc needs double quotes encoded. Must do second.
            #.replace( "\n", "" )
 
+        test123 = self.course.other_course_settings.get('ww_standalone')
+        #test123a = test123[ "test1" ]
+        test123a = json.dumps(test123)
+
+
         iframe_id = 'rendered-problem-' + self.unique_id;
-        iframe_resize_init = '<script type="text/javascript">//<![CDATA[\n iFrameResize({ checkOrigin: false, scrolling: true, minHeight: 50, maxHeight: 500, minWidth: 600 }, "#' + iframe_id + '")\n //]]></script>'
+        iframe_resize_init = \
+           '<script type="text/javascript">//<![CDATA[\n iFrameResize({ checkOrigin: false, scrolling: true' + \
+           ', minHeight: ' + str(self.iframe_min_height) + \
+           ', maxHeight: ' + str(self.iframe_max_height) + \
+           ', minWidth: '  + str(self.iframe_min_width)  + \
+           ', "#' + iframe_id + '")\n //]]></script>'
 
         # FIXME hide the show answers button
         # FIXME - the standalone renderer should do this
@@ -530,7 +596,7 @@ class WeBWorKXBlock(
         html = self.resource_string("static/html/webwork_standalone.html")
         js1  = self.resource_string("static/js/src/webwork_standalone.js")
 
-        frag = Fragment(html.format(self=self,srcdoc=mysrcdoc,unique_id=self.unique_id,iFrameInit=iframe_resize_init))
+        frag = Fragment(html.format(self=self,srcdoc=mysrcdoc,unique_id=self.unique_id,iFrameInit=iframe_resize_init,test123a=test123a))
 
         frag.add_javascript_url('https://cdnjs.cloudflare.com/ajax/libs/iframe-resizer/4.2.9/iframeResizer.js')
 
@@ -656,7 +722,7 @@ class WeBWorKXBlock(
             request = request_original.json.copy()
             self._sanitize_standalone(request)
 
-            
+
             # Handle check answer
             if request["submit_type"] == "submitAnswers":
 
@@ -683,7 +749,7 @@ class WeBWorKXBlock(
             # Handle preview answer
             elif request["submit_type"] == "previewAnswers":
                 response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
-                
+
             else:
                 raise WeBWorKXBlockError("Unknown submit button used")
 
