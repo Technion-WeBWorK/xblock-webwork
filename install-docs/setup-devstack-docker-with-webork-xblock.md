@@ -1,0 +1,87 @@
+<!--
+Colors convention: a Bootstrap-like color convention is followed see e.g.
+https://www.w3schools.com/bootstrap4/bootstrap_colors.asp
+
+Uncomment these HTML lines to see the effect and
+copy-paste in document up to need
+
+<span style="color:#0275d8">Primary text</span>  
+<span style="color:#5cb85c">Success text</span>  
+<span style="color:#5bc0de">Info text here</span>  
+<span style="color:#f0ad4e">Warning text</span>  
+<span style="color:#d9534f">Danger text</span>  
+<span style="color:#f7f7f7">Faded text</span>  
+-->
+
+## 1. Hardware requirements
+An up-to-date developer computer of the last 3 years, with 16GB ram should suffice.
+
+## 2. Download latest Ubuntu-LTS iso file
+Here it was ubuntu-20.04.2.0-desktop-amd64.iso
+
+## 3. Create a bootable disk-on-key with Ubuntu
+Use windows desktop to [Download Rufus](https://rufus.ie/en_US/#google_vignette) and double-click rufus-***.exe to Create a bootable ubuntu usb drive loaded with the Ubuntu-LTS iso file.
+
+## 4. Install Ubuntu
+1. Insert the disk-on-key into the intended comp
+2. Power up the computer and follow the normal Ubuntu installation instructions.  
+3. When done reboot into the freshly installed Ubuntu OS
+
+## 5. Install python + git + pip + virtualenv
+<span style="color:#f0ad4e">Warning: Verify there is an active Internet connection which is mandatory for package installs</span> 
+
+Open a terminal / command-shell and install python + git + pip + virtualenv:
+> sudo apt-get update  
+> echo "Checking your Python 3 interpreter..it is:" && python3 --version  
+> sudo apt install git  
+> sudo apt install python3-pip  
+> sudo pip3 install virtualenv
+
+## 6. Install docker
+Here it is assumed that the computer architecture is either  x86_64 or amd64, otherwise, properly choose the long command **echo \\..** in the [instructions](https://docs.docker.com/engine/install/ubuntu/)
+> sudo apt-get update  
+> sudo apt-get install apt-transport-https ca-certificates curl 
+    gnupg lsb-release  
+
+>curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg  
+
+> echo \
+"deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+$(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null  
+
+> sudo apt-get update  
+> sudo apt-get install docker-ce docker-ce-cli containerd.io
+
+## 7. Create a docker group
+This stage will [Enable docker commands without sudo prefix](https://stackoverflow.com/questions/48957195/how-to-fix-docker-got-permission-denied-issue)
+> sudo groupadd docker  
+> sudo usermod -aG docker $USER  
+> newgrp docker  
+> docker run hello-world  
+> (docker stop $(docker ps -a -q) && docker rm $(docker ps -a -q))
+
+## 8. Create an edx directory
+Here I arbitrarily chosen **XblockEx** directory name
+> mkdir XblockEx  
+> cd XblockEx  
+> mkdir edx-devstack  
+> cd edx-devstack
+
+## 9. Create and activate python virtual environment
+> virtualenv venv  
+> source venv/bin/activate
+
+## 10. Clone and install Open-edX devstack
+> git clone https://github.com/edx/devstack.git  
+> cd devstack  
+> make requirements  
+> make dev.clone.https  
+
+> echo "This stage requires good internet connection and will take few minutes:" && make dev.pull.large-and-slow  
+
+> echo "This is a very cpu-heavy stage and will take 30-60 minutes unless a very strong pc is used:" && make dev.provision  
+
+> make dev.down  
+> make dev.up  
+<span style="color:#5cb85c">**navigate to loacalhost:18000**</span>  
+
