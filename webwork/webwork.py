@@ -193,7 +193,7 @@ class WeBWorKXBlock(
     icon_class = 'problem'
     category = 'ww-problem'
 
-    def get_server_id_options(self):
+    def get_ww_server_id_options(self):
         """
         BLAH
         """
@@ -202,8 +202,21 @@ class WeBWorKXBlock(
 
     # ----------- External, editable fields -----------
     editable_fields = (
-        'ww_server_type', 'ww_server', 'ww_course', 'ww_username', 'ww_password',
-        'display_name', 'problem', 'max_allowed_score', 'max_attempts', 'show_answers'
+        # Main settings
+        'settings_type',
+        # For ID based server setting from course settings
+        'ww_server_id',
+        # For manual server setting
+        'ww_server_type', 'ww_server', 'auth_data',
+        'problem', 'max_allowed_score', 'max_attempts',
+        # For html2xml only:
+        'ww_course', 'ww_username', 'ww_password',
+        # Less important settings
+        'show_answers',
+        'iframe_min_height', 'iframe_max_height', 'iframe_min_width',
+        'display_name',
+        # Need in Studio but
+        'settings_are_dirty'
         )
 
     settings_type = Integer(
@@ -217,10 +230,15 @@ class WeBWorKXBlock(
        help=_("ID of server - should have a record in the Other course settings dictionary - see the documentation"),
     )
 
+    settings_are_dirty = Boolean(
+       scope = Scope.settings,
+       default = False
+    )
+
     ww_server_id = String(
        display_name = _("ID of server"),
        scope = Scope.settings,
-       #values = get_server_id_options,
+       #values = get_ww_server_id_options,
        default = None,
        help=_("ID of server - should have a record in the Other course settings dictionary - see the documentation"),
     )
@@ -240,28 +258,34 @@ class WeBWorKXBlock(
        display_name = _("WeBWorK server address"),
        # FIXME - this should depend on a main course setting
        default = _(WWSERVERLIST[SERVER]),
-       scope = Scope.content,
+       scope = Scope.settings,
        help=_("This is the full URL of the webwork server."),
+    )
+
+    auth_data = Dict(
+       display_name = _("Authentication settings for the server"),
+       scope = Scope.settings,
+       help=_("This is the authentication data needed to interface with the server. Required fields depend on the servert type."),
     )
 
     ww_course = String(
        display_name = _("WeBWorK course"),
        default = _("daemon_course"),
-       scope = Scope.content,
+       scope = Scope.settings,
        help=_("This is the course name to use when interfacing with the html2xml interface on a regular webwork server."),
     )
 
     ww_username = String(
        display_name = _("WeBWorK username"),
        default = _("daemon"),
-       scope = Scope.content,
+       scope = Scope.settings,
        help=_("This is the username to use when interfacing with the html2xml interface on a regular webwork server."),
     )
 
     ww_password = String(
        display_name = _("WeBWorK password"),
        default = _("wievith3Xos0osh"),
-       scope = Scope.content,
+       scope = Scope.settings,
        help=_("This is the password to use when interfacing with the html2xml interface on a regular webwork server."),
     )
 
@@ -281,7 +305,7 @@ class WeBWorKXBlock(
         # default = "part01a.pg",
         # Next line is for when working with local docker StandAlone webwork
         # default = "Library/SUNYSB/functionComposition.pg",
-        scope = Scope.settings,
+        scope = Scope.settings, # settings, so a course can modify, if needed
         help = _("The path to load the problem from."),
     )
 
@@ -576,7 +600,7 @@ class WeBWorKXBlock(
         if not self.show_answers:
             form += "<style> input[name='WWcorrectAns']{display: none !important;}</style>"
 
-        html = self.resource_string("static/html/webwork.html")
+        html = self.resource_string("static/html/webwork_html2xml.html")
         frag = Fragment(html.format(self=self,form=form))
         frag.add_css(self.resource_string("static/css/webwork.css"))
         frag.add_javascript(self.resource_string("static/js/src/webwork_html2xml.js"))
@@ -611,11 +635,12 @@ class WeBWorKXBlock(
 
         iframe_id = 'rendered-problem-' + self.unique_id;
         iframe_resize_init = \
-           '<script type="text/javascript">//<![CDATA[\n iFrameResize({ checkOrigin: false, scrolling: true' + \
+           '<script type="text/javascript">//<![CDATA[\n iFrameResize({ ' + \
+           'checkOrigin: false, scrolling: true' + \
            ', minHeight: ' + str(self.iframe_min_height) + \
            ', maxHeight: ' + str(self.iframe_max_height) + \
            ', minWidth: '  + str(self.iframe_min_width)  + \
-           ', "#' + iframe_id + '")\n //]]></script>'
+           '}, "#' + iframe_id + '")\n //]]></script>'
 
         # FIXME hide the show answers button
         # FIXME - the standalone renderer should do this
@@ -888,6 +913,9 @@ class WeBWorKXBlock(
         """
         Get Studio View fragment
         """
+
+        # Initialize the choices
+        # GGGGGGGGGG
         fragment = super().studio_view(context)
 
         fragment.add_javascript(self.resource_string("static/js/xblock_studio_view.js"))
