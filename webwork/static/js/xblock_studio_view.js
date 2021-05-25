@@ -11,10 +11,12 @@ function WebWorkXBlockInitStudio(runtime, element) {
     // Define lists of fields to hide in different cases
     const hide_for_settings_from_ID  = [
         "ww_server_type",
-        "ww_server",
+        "ww_server_api_url",
+        "ww_server_static_files_url",
         "auth_data"
     ];
     const show_for_settings_from_ID  = [
+        "ww_server_id_options",
         "ww_server_id"
     ];
 
@@ -132,5 +134,9 @@ function WebWorkXBlockInitStudio(runtime, element) {
         modifyFieldVisibility();
         setDirty();
      });
+
+     // Make ww_server_id_options read only
+    $(element).find('#xb-field-edit-ww_server_id_options').attr('readonly', true);
+
 
 }

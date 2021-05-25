@@ -22,9 +22,14 @@ try:
 except ImportError:
     sub_api = None  # We are probably in the workbench. Don't use the submissions API
 
-WWSERVERLIST = {
+WWSERVERAPILIST = {
     'TechnionFullWW':'https://webwork2.technion.ac.il/webwork2/html2xml',
     'LocalStandAloneWW':'http://WWStandAlone:3000/render-api',
+}
+
+WWSERVERFILESLIST = {
+    'TechnionFullWW':'https://webwork2.technion.ac.il/webwork2_files',
+    'LocalStandAloneWW':'error',
 }
 
 # SERVER = 'TechnionFullWW'
@@ -99,10 +104,16 @@ STANDALONE_RESPONSE_PARAMETERS_CORRECT = dict(STANDALONE_RESPONSE_PARAMETERS_BAS
 class WeBWorKXBlockError(RuntimeError):
     pass
 
+# FIXME - this should be kept in a different file, clearing keeping the code from that
+# project seperate from that of this project.
 class StudentViewUserStateMixin:
     """
     This class has been copy-pasted from the problem-builder xblock file mixins.py
-    it provides student_view_user_state view.
+    https://github.com/open-craft/problem-builder/blob/master/problem_builder/mixins.py
+    which is licensed under the GNU AFFERO GENERAL PUBLIC LICENSE version 3
+    https://github.com/open-craft/problem-builder/blob/master/LICENSE
+
+    This code provides student_view_user_state view.
 
     To prevent unnecessary overloading of the build_user_state_data method,
     you may specify `USER_STATE_FIELDS` to customize build_user_state_data
@@ -193,29 +204,76 @@ class WeBWorKXBlock(
     icon_class = 'problem'
     category = 'ww-problem'
 
-    def get_ww_server_id_options(self):
-        """
-        BLAH
-        """
-        return self.course.other_course_settings.get('webwork_settings', {}).get('server_list', [])
+# FIXME
+    main_settings = None
+    def reload_main_setting(self):
+        self.main_settings = self.course.other_course_settings.get('webwork_settings', {})
 
+    def get_default_server(self):
+        return self.main_settings.get('course_defaults',{}).get('default_server')
+
+    # Current server connection related settings
+    current_server_settings = {};
+
+    def clear_current_server_settings(self):
+        self.current_server_settings.update( {
+            "server_type": None,
+            "server_api_url": None,
+            "auth_data": None,
+        })
+
+    def set_current_server_settings(self):
+        self.clear_current_server_settings()
+        if self.settings_type == 1:
+            # Use the course-wide settings for the relevant ww_server_id
+            self.current_server_settings.update(self.main_settings.get('server_settings',{}).get(self.ww_server_id, {}))
+            self.current_server_settings.update({"server_static_files_url":None}) # Not used by standalone
+        elif self.settings_type == 2:
+            # Use the locally set values from the specific XBlock instance
+            self.current_server_settings.update({
+                "server_type":             self.ww_server_type,
+                "server_api_url":          self.ww_server_api_url,
+                "server_static_files_url": self.ww_server_static_files_url,
+                "auth_data":               self.auth_data,
+            })
+
+    def set_ww_server_id_options(self):
+        """
+        Set the list of course-wide ww_server_id options to display, pulled from the
+        other course settings data
+        """
+        options_to_offer = [ ]
+        my_default_server = self.get_default_server()
+        if my_default_server:
+            options_to_offer.append(my_default_server)
+        server_list = self.main_settings.get('server_settings',{}).keys()
+        if server_list:
+            for sid in server_list:
+                if sid != my_default_server:
+                    options_to_offer.append(sid)
+        if not options_to_offer:
+            options_to_offer.append("None available from course settings")
+        self.ww_server_id_options = options_to_offer
 
     # ----------- External, editable fields -----------
     editable_fields = (
         # Main settings
         'settings_type',
         # For ID based server setting from course settings
+        'ww_server_id_options',
         'ww_server_id',
         # For manual server setting
-        'ww_server_type', 'ww_server', 'auth_data',
+        'ww_server_type', 'ww_server_api_url', 'ww_server_static_files_url', 'auth_data',
+        # Main problem settings
         'problem', 'max_allowed_score', 'max_attempts',
         # For html2xml only:
         'ww_course', 'ww_username', 'ww_password',
         # Less important settings
         'show_answers',
+        'post_deadline_lockdown',
         'iframe_min_height', 'iframe_max_height', 'iframe_min_width',
         'display_name',
-        # Need in Studio but
+        # Need in Studio but should be hidden from end-user
         'settings_are_dirty'
         )
 
@@ -235,12 +293,17 @@ class WeBWorKXBlock(
        default = False
     )
 
+    ww_server_id_options = String(
+       display_name = _("List of course wide server ID options"),
+       scope = Scope.settings,
+       help=_("Options of server IDs available in the course. This is a read only list!"),
+    )
+
     ww_server_id = String(
        display_name = _("ID of server"),
        scope = Scope.settings,
-       #values = get_ww_server_id_options,
        default = None,
-       help=_("ID of server - should have a record in the Other course settings dictionary - see the documentation"),
+       help=_("ID of server - enter an option from the list in ww_server_id_options."),
     )
 
     ww_server_type = String(
@@ -254,12 +317,20 @@ class WeBWorKXBlock(
        help=_("This is the type of webwork server rendering and grading the problems (html2xml or standalone)."),
     )
 
-    ww_server = String(
-       display_name = _("WeBWorK server address"),
+    ww_server_api_url = String(
+       display_name = _("WeBWorK server address with API endoint"),
        # FIXME - this should depend on a main course setting
-       default = _(WWSERVERLIST[SERVER]),
+       default = _(WWSERVERAPILIST[SERVER]),
        scope = Scope.settings,
-       help=_("This is the full URL of the webwork server."),
+       help=_("This is the full URL of the webwork server including the path to the html2xml or render-api endpoint."),
+    )
+
+    ww_server_static_files_url = String(
+       display_name = _("WeBWorK server address with path for static files"),
+       # FIXME - this should depend on a main course setting
+       default = _(WWSERVERFILESLIST[SERVER]),
+       scope = Scope.settings,
+       help=_("This is the URL of the path to static files on the webwork server."),
     )
 
     auth_data = Dict(
@@ -268,6 +339,7 @@ class WeBWorKXBlock(
        help=_("This is the authentication data needed to interface with the server. Required fields depend on the servert type."),
     )
 
+    # Moved into external settings - "Other course settings" data structure
     ww_course = String(
        display_name = _("WeBWorK course"),
        default = _("daemon_course"),
@@ -321,6 +393,13 @@ class WeBWorKXBlock(
         default = 0,
         scope = Scope.settings,
         help = _("Max number of allowed submissions (0 = unlimited)"),
+    )
+
+    post_deadline_lockdown = Integer(
+        display_name = _("Post deadline lockdown period (in hours) when submission is not permitted"),
+        default = 24,
+        scope = Scope.settings,
+        help = _("How long, in hours, should the problem be locked after the deadline (except during the grace period) before submission is allowed again (0 = no delay)"),
     )
 
     show_answers = Boolean(
@@ -492,8 +571,14 @@ class WeBWorKXBlock(
     def request_webwork_html2xml(self, params):
         # html2xml uses HTTP GET
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
-        # probably need something like date = { params, 'courseID':str(self.ww_course), ... }
-        return requests.get(self.ww_server, params=dict(
+
+        # Get updated main course settings from main course "Other course settings"
+        # Do this now, as we may need updated main connection settings
+        self.reload_main_setting()
+        # and then
+        self.set_current_server_settings()
+
+        return requests.get(self.ww_server_api_url, params=dict(
                     params,
                     courseID=str(self.ww_course),
                     userID=str(self.ww_username),
@@ -510,11 +595,17 @@ class WeBWorKXBlock(
         # remember the URL needs to have :3000/render-api
         # and outputFormat set to "simple" and format set to "json".
         # Check by examining form parameters from Rederly UI on "render" call.
-        return requests.post(self.ww_server, params=dict(
+
+        # Get updated main course settings from main course "Other course settings"
+        # Do this now, as we may need updated main connection settings
+
+        self.reload_main_setting()
+        # and then
+        self.set_current_server_settings()
+
+        return requests.post(self.ww_server_api_url, params=dict(
                     params,
-                    #courseID=str(self.ww_course),
-                    #userID=str(self.ww_username),
-                    #course_password=str(self.ww_password),
+                    # standalone does not have course/user/password
                     problemSeed=str(self.seed),
                     psvn=str(self.psvn),
                     sourceFilePath=str(self.problem)
@@ -572,6 +663,13 @@ class WeBWorKXBlock(
         The primary view of the XBlock, shown to students
         when viewing courses.
         """
+
+        # Get updated main course settings from main course "Other course settings"
+        # Do this now, as we may need updated main connection settings
+        self.reload_main_setting()
+        # and then
+        self.set_current_server_settings()
+
         if self.ww_server_type == 'html2xml':
             return self.student_view_html2xml(self)
         if self.ww_server_type == 'standalone':
@@ -913,6 +1011,27 @@ class WeBWorKXBlock(
         """
         Get Studio View fragment
         """
+
+        # Get updated main course settings from main course "Other course settings"
+        # Do this now, before presenting the options, etc.
+        self.reload_main_setting()
+
+        #DELETE THIS#self.main_settings = self.course.other_course_settings.get('webwork_settings', {})
+        # The set the list of server_id_options to be displayed
+        self.set_ww_server_id_options()
+
+        # When relevant - set a default value for ww_server_id
+        if not self.ww_server_id and self.settings_type == 1:
+            # No setting currently set, but in server_id mode - so set the default
+            default_server = self.main_settings.get('course_defaults',{}).get('default_server')
+            if default_server:
+                self.ww_server_id = default_server
+
+# FIXME GGGGGGGGGGG
+#        if self.default_server:
+#            self.default_server_type = self.main_settings.get( self.default_server, {} ).get( "server_type" )
+#        else:
+#            self.default_server_type = None
 
         # Initialize the choices
         # GGGGGGGGGG
