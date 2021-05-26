@@ -81,7 +81,75 @@ Here I arbitrarily chosen **XblockEx** directory name
 
 > echo "This is a very cpu-heavy stage and will take 30-60 minutes unless a very strong pc is used:" && make dev.provision  
 
-> make dev.down  
-> make dev.up  
-<span style="color:#5cb85c">**navigate to loacalhost:18000**</span>  
+> make dev.down
+## 11. Verify correct installation
+1. Activate all Open-edX containers and <span style="color:#f0ad4e">**wait at least 1-minute**</span> after the command claims it is "done" with:
+   > make dev.up
+2. Verify all containers are up (as opposed to Exited or other state) with
+   > docker ps -a
+3. Wait about 1-minute and check it out to work properly in your browser:  
+    http://localhost:18000  
+    <img src="Edx-Devstack-Entry-Page.png" alt="drawing" width="500"/>  
+4.
+    > make dev.down
+  
+## 12. Clone xblock-webwork into edx-platform/src/
+> cd ../edx-platform/  
+> mkdir src  
+> cd src  
+> git clone https://github.com/tsabaryg/xblock-webwork.git
+
+You will need to supply a git user+password with permission  
+Contact guyts@technion.ac.il or tani@mathnet.technion.ac.il for permission request.
+
+## 13. Add xblock-webwork to docker-compose.yml:  
+> cd ~/XblockEx/edx-devstack/devstack  
++ Open docker-compose.yml with VS-Code or nano
++ Navigate in the file Under the line of  
+    lms: 
+    > replace (or comment) the long bash command into:  
+    > 
+        lms:  
+        command: >
+            bash -c '
+            source /edx/app/edxapp/edxapp_env && 
+            pip install ptvsd && 
+            pip install /edx/app/edxapp/edx-platform/src/xblock-webwork/ && 
+            echo "tani-123" && 
+            while true; do python /edx/app/edxapp/edx-platform/manage.py 
+            lms runserver 0.0.0.0:18000 --settings devstack_docker;
+            sleep 2; done'
+
++ repeat equivalent change with studio - navigate Under the line of studio: 
+    > replace (or comment) the long bash command into:  
+    > 
+        studio:
+        command: >
+            bash -c '
+            source /edx/app/edxapp/edxapp_env && 
+            pip install ptvsd && 
+            pip install /edx/app/edxapp/edx-platform/src/xblock-webwork/ && 
+            echo "tani-456" && 
+            while true; do python /edx/app/edxapp/edx-platform/manage.py cms 
+            runserver 0.0.0.0:18010 --settings devstack_docker; 
+            sleep 2; done'
+
++ Save and exit
+
+## 14. Enable the XBlock in Your Course:  
+
+  + Sign in into http://localhost:18000 with  
+     > Login: staff@example.com  
+     > Pass: edx  
+  + Navigate in the browser to: Demonstration Course->view in studio->view live->view in studio
+  + From the course Settings menu, select Advanced Settings:  
+     <img src="Edx-Devstack-Settings.png" alt="drawing" width="500"/>
+  + In the Advanced Module List field, place your cursor between the braces, add comma and then type "webwork":  
+      <img src="Edx-Devstack-Advanced-Module-List.png" alt="drawing" width="500"/>
+  + Save the settings  
+  + Navigate again to: Demonstration Course->view in studio->view live->view in studio
+  + Scroll down and find Add New Component -> Advanced
+    And choose your Webwork Problem -> done:  
+     <img src="Edx-Devstack-Add-New-Component.png" alt="drawing" width="500"/>
+
 
