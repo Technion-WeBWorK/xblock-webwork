@@ -226,14 +226,14 @@ class WeBWorKXBlock(
             self.current_server_settings.update({"server_static_files_url":None}) # Not used by standalone
         elif self.settings_type == 2:
             # Use the locally set values from the specific XBlock instance
-            self.current_server_settings.update({
-                "server_type":             self.ww_server_type,
-                "server_api_url":          self.ww_server_api_url,
-                "auth_data":               self.auth_data,
+            self.current_server_settings.update({  # Need str() on the first 2 to force into a final string form, and not __proxy__
+                "server_type":             str(self.ww_server_type),
+                "server_api_url":          str(self.ww_server_api_url),
+                "auth_data":               self.auth_data, # But not here - as it is a Dict
             })
             if self.ww_server_type == "html2ml":
                 self.current_server_settings.update({
-                    "server_static_files_url": self.ww_server_static_files_url
+                    "server_static_files_url": str(self.ww_server_static_files_url)
                 })
 
     def set_ww_server_id_options(self):
@@ -757,10 +757,13 @@ class WeBWorKXBlock(
         test123 = self.current_server_settings
         my_st = "error reading server type  from self.current_server_settings"
         try:
-            test123a = json.dumps(test123)
-            my_st = self.current_server_settings.get("server_type","")
+            test123a = json.dumps(test123,skipkeys=True)
         except TypeError:
             test123a = "could not provide self.current_server_settings"
+        try:
+            my_st = self.current_server_settings.get("server_type","")
+        except:
+            my_st = "hit here"
         tmp1 = "temp value"
         if  my_st == 'standalone':
             tmp1 = "reports == standalone"
