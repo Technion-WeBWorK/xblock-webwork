@@ -137,7 +137,8 @@ Contact guyts@technion.ac.il or tani@mathnet.technion.ac.il for permission reque
 + Save and exit
 
 ## 14. Enable the XBlock in Your Course:  
-
+  + > make dev.up
+  + <span style="color:#5cb85c">**navigate to loacalhost:18000**</span>  
   + Sign in into http://localhost:18000 with  
      > Login: staff@example.com  
      > Pass: edx  
