@@ -539,7 +539,7 @@ class WeBWorKXBlock(
 
         return fixed_state
 
-    def _result_from_json_html2xml(self,response_json):
+    def _result_from_json_html2xml_split_json(self,response_json):
         if response_json is None:
             return "Error"
         return response_json["body_part300"]
@@ -561,7 +561,7 @@ class WeBWorKXBlock(
 #               '  problem_state: '  + response_json["problem_state"] + ' }'
 
     @staticmethod
-    def _sanitize_html2xml(request):
+    def _sanitize_request_html2xml(request):
         for action in (
             HTML2XML_REQUEST_PARAMETERS, HTML2XML_RESPONSE_PARAMETERS_CORRECT,
             HTML2XML_RESPONSE_PARAMETERS_PREVIEW, HTML2XML_RESPONSE_PARAMETERS_CHECK
@@ -570,7 +570,7 @@ class WeBWorKXBlock(
                 request.pop(key, None)
 
     @staticmethod
-    def _sanitize_standalone(request):
+    def _sanitize_request_standalone(request):
         for action in (
             STANDALONE_REQUEST_PARAMETERS, STANDALONE_RESPONSE_PARAMETERS_CORRECT,
             STANDALONE_RESPONSE_PARAMETERS_PREVIEW, STANDALONE_RESPONSE_PARAMETERS_CHECK
@@ -578,7 +578,7 @@ class WeBWorKXBlock(
             for key in action:
                 request.pop(key, None)
 
-    def request_webwork_html2xml(self, params):
+    def request_webwork_html2xml_split_json(self, params):
         # html2xml uses HTTP GET
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
 
@@ -693,7 +693,7 @@ class WeBWorKXBlock(
         self.set_current_server_settings()
 
         if self.current_server_settings.get("server_type") == 'html2xml':
-            return self.student_view_html2xml(self)
+            return self.student_view_html2xml_no_iframe(self)
         if self.current_server_settings.get("server_type") == 'standalone':
             return self.student_view_standalone(self)
         return self.student_view_error(self)
@@ -701,8 +701,8 @@ class WeBWorKXBlock(
     # ----------- View for html2xml -----------
 
     #FIXME
-    #def student_view_html2xml(self, context=None, show_detailed_errors=False):
-    def student_view_html2xml(self, context=None, show_detailed_errors=True):
+    #def student_view_html2xml_no_iframe(self, context=None, show_detailed_errors=False):
+    def student_view_html2xml_no_iframe(self, context=None, show_detailed_errors=True):
         """
         The primary view of the XBlock, shown to students
         when viewing courses. For html2xml interface use
@@ -716,7 +716,7 @@ class WeBWorKXBlock(
         if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
             disabled = True
 
-        form = self._problem_from_json(self.request_webwork_html2xml(HTML2XML_REQUEST_PARAMETERS))
+        form = self._problem_from_json(self.request_webwork_html2xml_split_json(HTML2XML_REQUEST_PARAMETERS))
 
         # hide the show answers button
         if not self.show_answers:
@@ -808,15 +808,15 @@ class WeBWorKXBlock(
 
         form = ""
 
-        html = self.resource_string("static/html/webwork_html2xml.html")
+        html = self.resource_string("static/html/webwork_html2xml_no_iframe.html")
         frag = Fragment(html.format(self=self,form=form))
         frag.add_css(self.resource_string("static/css/webwork.css"))
         return frag
 
 
-    # ----------- Handler for htm2lxml-----------
+    # ----------- Handler for htm2lxml_no_iframe-----------
     @XBlock.handler
-    def submit_webwork_html2xml(self, request_original, suffix=''):
+    def submit_webwork_html2xml_no_iframe(self, request_original, suffix=''):
         """
         Handle the student's submission.
         """
@@ -831,7 +831,7 @@ class WeBWorKXBlock(
         try:
             # Copy the request
             request = request_original.json.copy()
-            self._sanitize_html2xml(request)
+            self._sanitize_request_html2xml(request)
 
             # Handle check answer
             if request["submit_type"] == "WWsubmit":
@@ -866,10 +866,10 @@ class WeBWorKXBlock(
             # Looks good! Send the data to WeBWorK
             request.update(response_parameters)
 
-            webwork_response = self.request_webwork_html2xml(request)
+            webwork_response = self.request_webwork_html2xml_split_json(request)
             # This is the "answer" that is documented in the mysql DB tables.
             # TODO: We need to build a better JSON object to store
-            response["data"] = self._result_from_json_html2xml(webwork_response)
+            response["data"] = self._result_from_json_html2xml_split_json(webwork_response)
 
             if response["scored"]:
                 score = Score(raw_earned = webwork_response["score"], raw_possible = self.max_score())
@@ -922,7 +922,7 @@ class WeBWorKXBlock(
         try:
             # Copy the request
             request = request_original.json.copy()
-            self._sanitize_standalone(request)
+            self._sanitize_request_standalone(request)
 
 
             # Handle check answer
