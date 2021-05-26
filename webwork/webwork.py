@@ -213,14 +213,10 @@ class WeBWorKXBlock(
         return self.main_settings.get('course_defaults',{}).get('default_server')
 
     # Current server connection related settings
-    current_server_settings = {};
+    current_server_settings = {}
 
     def clear_current_server_settings(self):
-        self.current_server_settings.update( {
-            "server_type": None,
-            "server_api_url": None,
-            "auth_data": None,
-        })
+        self.current_server_settings.clear()
 
     def set_current_server_settings(self):
         self.clear_current_server_settings()
@@ -509,9 +505,13 @@ class WeBWorKXBlock(
         #     everything between <body> and </body>
         # and then the JS loads
         #     between <!-- JS Loads --> and BEFORE <title>
+        fixed_state = 'Error' # Fallback
 
+        if response_json is None:
+            return 'Error'
         # Replace source address where needed
-        if self.ww_server_type == 'html2xml':
+        #if self.ww_server_type == 'html2xml':
+        if self.current_server_settings.get("server_type","") == 'html2xml':
             raw_state = \
                 response_json["body_part100"] + response_json["body_part300"] + \
                 response_json["body_part500"] + response_json["body_part530"] + \
@@ -519,9 +519,14 @@ class WeBWorKXBlock(
                 response_json["body_part710"] + response_json["body_part780_optional"] + \
                 response_json["body_part790"] + response_json["body_part999"][:-16] + \
                 response_json["head_part200"]
-            fixed_state = raw_state.replace(
-                 "\"/webwork2_files", "\"https://webwork2.technion.ac.il/webwork2_files" )
-        elif self.ww_server_type == 'standalone':
+            # Attempt to fix relative URLs for static files
+            fix_url = self.current_server_settings.get('server_static_files_url')
+            if fix_url:
+                fixed_state = raw_state.replace(
+                     "\"/webwork2_files", "\"" + fix_url )
+            else:
+                fixed_state = raw_state
+        elif self.current_server_settings.get("server_type","") == 'standalone':
             # raw_state = str(response_json.content)
             # fixed_state = raw_state.replace(
             #     '/webwork2_files', 'http://WWStandAlone:3000/webwork2_files')
@@ -532,6 +537,8 @@ class WeBWorKXBlock(
         return fixed_state
 
     def _result_from_json_html2xml(self,response_json):
+        if response_json is None:
+            return "Error"
         return response_json["body_part300"]
 
     def _result_from_json_standalone(self,response_json):
@@ -578,15 +585,21 @@ class WeBWorKXBlock(
         # and then
         self.set_current_server_settings()
 
-        return requests.get(self.ww_server_api_url, params=dict(
+        my_url = self.current_server_settings.get("server_api_url")
+        my_auth_data = self.current_server_settings.get("auth_data",{})
+        if my_url:
+            my_res = requests.get(my_url, params=dict(
                     params,
-                    courseID=str(self.ww_course),
-                    userID=str(self.ww_username),
-                    course_password=str(self.ww_password),
+                    courseID=my_auth_data.get('ww_course','error'),
+                    userID=my_auth_data.get('ww_username','error'),
+                    course_password=my_auth_data.get('ww_password','error'),
                     problemSeed=str(self.seed),
                     psvn=str(self.psvn),
                     sourceFilePath=str(self.problem)
-                )).json()
+                ))
+        if my_res:
+            return my_res.json()
+        return None
 
     def request_webwork_standalone(self, params):
         # Standalone uses HTTP POST
@@ -603,13 +616,19 @@ class WeBWorKXBlock(
         # and then
         self.set_current_server_settings()
 
-        return requests.post(self.ww_server_api_url, params=dict(
+        my_url = self.current_server_settings.get("server_api_url")
+        if my_url:
+            my_res = requests.post(my_url, params=dict(
                     params,
                     # standalone does not have course/user/password
                     problemSeed=str(self.seed),
                     psvn=str(self.psvn),
                     sourceFilePath=str(self.problem)
-                )).json()
+                ))
+            if my_res:
+                return my_res.json()
+            return None;
+            
 
     # ----------- Grading -----------
     """
@@ -670,15 +689,17 @@ class WeBWorKXBlock(
         # and then
         self.set_current_server_settings()
 
-        if self.ww_server_type == 'html2xml':
+        if self.current_server_settings.get("server_type") == 'html2xml':
             return self.student_view_html2xml(self)
-        if self.ww_server_type == 'standalone':
+        if self.current_server_settings.get("server_type") == 'standalone':
             return self.student_view_standalone(self)
-        return 'Error'
+        return self.student_view_error(self)
 
     # ----------- View for html2xml -----------
 
-    def student_view_html2xml(self, context=None, show_detailed_errors=False):
+    #FIXME
+    #def student_view_html2xml(self, context=None, show_detailed_errors=False):
+    def student_view_html2xml(self, context=None, show_detailed_errors=True):
         """
         The primary view of the XBlock, shown to students
         when viewing courses. For html2xml interface use
@@ -707,7 +728,9 @@ class WeBWorKXBlock(
 
     # ----------- View for standalone -----------
 
-    def student_view_standalone(self, context=None, show_detailed_errors=False):
+    # FIXME
+    #def student_view_standalone(self, context=None, show_detailed_errors=False):
+    def student_view_standalone(self, context=None, show_detailed_errors=True):
         """
         The primary view of the XBlock, shown to students
         when viewing courses. For standalone renderer use
@@ -726,10 +749,17 @@ class WeBWorKXBlock(
            ).replace( "\"", "&quot;" )  # srcdoc needs double quotes encoded. Must do second.
            #.replace( "\n", "" )
 
-        test123 = self.course.other_course_settings.get('ww_standalone')
+        #test123 = self.course.other_course_settings.get('ww_standalone')
         #test123a = test123[ "test1" ]
+        test123 = self.current_server_settings
         test123a = json.dumps(test123)
-
+        tmp1 = "temp value"
+        if self.current_server_settings.get("server_type","") == 'standalone':
+            tmp1 = "reports == standalone"
+        else:
+            tmp1 = "reports != standalone"
+        test123a = test123a + "   " + self.current_server_settings.get("server_type","") + tmp1
+            
 
         iframe_id = 'rendered-problem-' + self.unique_id;
         iframe_resize_init = \
@@ -760,6 +790,21 @@ class WeBWorKXBlock(
 
         return frag
 
+
+    # ----------- View for error -----------
+
+    def student_view_error(self, context=None, show_detailed_errors=False):
+        """
+        The primary view of the XBlock, shown to students
+        when viewing courses. When error hit
+        """
+
+        form = ""
+
+        html = self.resource_string("static/html/webwork_html2xml.html")
+        frag = Fragment(html.format(self=self,form=form))
+        frag.add_css(self.resource_string("static/css/webwork.css"))
+        return frag
 
 
     # ----------- Handler for htm2lxml-----------
