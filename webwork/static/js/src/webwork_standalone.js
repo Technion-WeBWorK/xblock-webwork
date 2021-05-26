@@ -1,6 +1,6 @@
 /* Javascript for WeBWorKXBlock for use with the standalone renderer */
 
-function WeBWorKXBlock(runtime, element, initdata) {
+function WeBWorKXBlockStandalone(runtime, element, initdata) {
 
     var handlerUrl = runtime.handlerUrl(element, 'submit_webwork_standalone');
 

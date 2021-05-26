@@ -229,9 +229,12 @@ class WeBWorKXBlock(
             self.current_server_settings.update({
                 "server_type":             self.ww_server_type,
                 "server_api_url":          self.ww_server_api_url,
-                "server_static_files_url": self.ww_server_static_files_url,
                 "auth_data":               self.auth_data,
             })
+            if self.ww_server_type == "html2ml":
+                self.current_server_settings.update({
+                    "server_static_files_url": self.ww_server_static_files_url
+                })
 
     def set_ww_server_id_options(self):
         """
@@ -719,11 +722,11 @@ class WeBWorKXBlock(
         if not self.show_answers:
             form += "<style> input[name='WWcorrectAns']{display: none !important;}</style>"
 
-        html = self.resource_string("static/html/webwork_html2xml.html")
+        html = self.resource_string("static/html/webwork_html2xml_no_iframe.html")
         frag = Fragment(html.format(self=self,form=form))
         frag.add_css(self.resource_string("static/css/webwork.css"))
-        frag.add_javascript(self.resource_string("static/js/src/webwork_html2xml.js"))
-        frag.initialize_js('WeBWorKXBlock')
+        frag.add_javascript(self.resource_string("static/js/src/webwork_html2xml_no_iframe.js"))
+        frag.initialize_js('WeBWorKXBlockHtml2xmlNoIframe')
         return frag
 
     # ----------- View for standalone -----------
@@ -752,14 +755,18 @@ class WeBWorKXBlock(
         #test123 = self.course.other_course_settings.get('ww_standalone')
         #test123a = test123[ "test1" ]
         test123 = self.current_server_settings
-        test123a = json.dumps(test123)
+        my_st = "error reading server type  from self.current_server_settings"
+        try:
+            test123a = json.dumps(test123)
+            my_st = self.current_server_settings.get("server_type","")
+        except TypeError:
+            test123a = "could not provide self.current_server_settings"
         tmp1 = "temp value"
-        if self.current_server_settings.get("server_type","") == 'standalone':
+        if  my_st == 'standalone':
             tmp1 = "reports == standalone"
         else:
             tmp1 = "reports != standalone"
-        test123a = test123a + "   " + self.current_server_settings.get("server_type","") + tmp1
-            
+        test123a = test123a + "   " + my_st + tmp1
 
         iframe_id = 'rendered-problem-' + self.unique_id;
         iframe_resize_init = \
@@ -783,7 +790,7 @@ class WeBWorKXBlock(
         frag.add_css(self.resource_string("static/css/webwork.css"))
         frag.add_javascript( js1 )
 
-        frag.initialize_js('WeBWorKXBlock', {
+        frag.initialize_js('WeBWorKXBlockStandalone', {
           'unique_id' : self.unique_id,
           'rpID' : iframe_id
         })
