@@ -3,7 +3,7 @@
 */
 function WebWorkXBlockInitStudio(runtime, element) {
 
-    alwaysHideList = [ 'settings_are_dirty' ];
+    alwaysHideList = [ ];
 
     // Run parent function to set up studio view base JS
     StudioEditableXBlockMixin(runtime, element);
@@ -43,10 +43,6 @@ function WebWorkXBlockInitStudio(runtime, element) {
         } else {
             fieldContainer.hide();
         }
-    }
-    function setDirty() {
-        console.log( "Running setDirty");
-        $(element).find('#xb-field-edit-settings_are_dirty').val(1);
     }
 
     /**
@@ -118,21 +114,18 @@ function WebWorkXBlockInitStudio(runtime, element) {
     $(element).find('#xb-field-edit-settings_type').bind('change', function() {
         console.log( "Running onChange for settings_type");
         modifyFieldVisibility();
-        setDirty();
      });
 
     // Bind to onChange method of ww_server_id selector
     $(element).find('#xb-field-edit-ww_server_id').bind('change', function() {
         console.log( "Running onChange for ww_server_id");
         modifyFieldVisibility();
-        setDirty();
      });
 
      // Bind to onChange method of ww_server_type selector
     $(element).find('#xb-field-edit-ww_server_type').bind('change', function() {
         console.log( "Running onChange for ww_server_type");
         modifyFieldVisibility();
-        setDirty();
      });
 
      // Make ww_server_id_options read only

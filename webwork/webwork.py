@@ -7,6 +7,7 @@ import datetime
 import requests # Ease the contact with webwork server via HTTP/1.1
 import pkg_resources # Used here to return resource name as a string
 import six
+import pytz # python timezone
 from xblock.core import XBlock
 from django.utils.translation import ugettext_lazy as _
 from xblock.fields import String, Scope, Integer, List, Dict, Float, Boolean, DateTime, UNIQUE_ID
@@ -20,10 +21,6 @@ from cms.djangoapps.models.settings.course_grading import CourseGradingModel
 from enum import IntFlag, unique
 from xmodule.util.duedate import get_extended_due_date
 
-try:
-    from submissions import api as sub_api
-except ImportError:
-    sub_api = None  # We are probably in the workbench. Don't use the submissions API
 
 WWSERVERAPILIST = {
     'TechnionFullWW':'https://webwork2.technion.ac.il/webwork2/html2xml',
@@ -286,12 +283,18 @@ class WeBWorKXBlock(
     def clear_problem_period(self):
         del self._problem_period
 
+    show_in_read_only_mode = True # Allows staff to view the problem in read only mode when masquerading as a user.
+    # See https://github.com/edx/edx-platform/blob/master/lms/djangoapps/courseware/masquerade.py
+
+
 # FIXME
     main_settings = None
     def reload_main_setting(self):
         self.main_settings = self.course.other_course_settings.get('webwork_settings', {})
 
     def get_default_server(self):
+        if self.main_settings == None:
+             self.reload_main_setting()
         return self.main_settings.get('course_defaults',{}).get('default_server')
 
     # Current server connection related settings
@@ -334,7 +337,7 @@ class WeBWorKXBlock(
                     options_to_offer.append(sid)
         if not options_to_offer:
             options_to_offer.append("None available from course settings")
-        self.ww_server_id_options = options_to_offer
+        self.ww_server_id_options = json.dumps(options_to_offer,skipkeys=True)
 
     # ----------- External, editable fields -----------
     editable_fields = (
@@ -354,8 +357,7 @@ class WeBWorKXBlock(
         'post_deadline_lockdown',
         'iframe_min_height', 'iframe_max_height', 'iframe_min_width',
         'display_name', 'webwork_request_timeout',
-        # Need in Studio but should be hidden from end-user
-        'settings_are_dirty'
+        'display_name'
         )
 
     settings_type = Integer(
@@ -367,11 +369,6 @@ class WeBWorKXBlock(
        ],
        default = 1,
        help=_("ID of server - should have a record in the Other course settings dictionary - see the documentation"),
-    )
-
-    settings_are_dirty = Boolean(
-       scope = Scope.settings,
-       default = False
     )
 
     ww_server_id_options = String(
@@ -593,7 +590,6 @@ class WeBWorKXBlock(
         if response_json is None:
             return 'Error'
         # Replace source address where needed
-        #if self.ww_server_type == 'html2xml':
         if self.current_server_settings.get("server_type","") == 'html2xml':
             raw_state = \
                 response_json['body_part100'] + response_json['body_part300'] + \
@@ -1210,7 +1206,7 @@ class WeBWorKXBlock(
 #            })
 
         except WeBWorKXBlockError as e:
-            response['message'] = e.message
+            response['message'] = "fixme" # e.message
 
         return Response(
                 # FIXME - this is from the html2xml code
@@ -1229,25 +1225,18 @@ class WeBWorKXBlock(
         # Do this now, before presenting the options, etc.
         self.reload_main_setting()
 
-        #DELETE THIS#self.main_settings = self.course.other_course_settings.get('webwork_settings', {})
         # The set the list of server_id_options to be displayed
         self.set_ww_server_id_options()
 
         # When relevant - set a default value for ww_server_id
         if not self.ww_server_id and self.settings_type == 1:
             # No setting currently set, but in server_id mode - so set the default
-            default_server = self.main_settings.get('course_defaults',{}).get('default_server')
+            default_server = self.get_default_server()
             if default_server:
                 self.ww_server_id = default_server
 
-# FIXME GGGGGGGGGGG
-#        if self.default_server:
-#            self.default_server_type = self.main_settings.get( self.default_server, {} ).get( "server_type" )
-#        else:
-#            self.default_server_type = None
 
         # Initialize the choices
-        # GGGGGGGGGG
         fragment = super().studio_view(context)
 
         fragment.add_javascript(self.resource_string("static/js/xblock_studio_view.js"))
