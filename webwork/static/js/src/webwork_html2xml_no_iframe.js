@@ -1,4 +1,4 @@
-/* Javascript for WeBWorKXBlock. */
+/* Javascript for WeBWorKXBlock (html2xml and no iframe). */
 (function ($) {
     $.fn.serializeFormJSON = function () {
         var o = {};
@@ -17,9 +17,9 @@
     };
 })(jQuery);
 
-function WeBWorKXBlock(runtime, element) {
+function WeBWorKXBlockHtml2xmlNoIframe(runtime, element) {
 
-    var handlerUrl = runtime.handlerUrl(element, 'submit_webwork_html2xml');
+    var handlerUrl = runtime.handlerUrl(element, 'submit_webwork_html2xml_no_iframe');
 
     function handleResponse(result) {
         $("#edx_message").html("")

@@ -10,7 +10,8 @@ import six
 import pytz # python timezone
 from xblock.core import XBlock
 from django.utils.translation import ugettext_lazy as _
-from xblock.fields import String, Scope, Integer, Dict, Float, Boolean, DateTime, UNIQUE_ID
+from xblock.fields import String, Scope, Integer, List, Dict, Float, Boolean, DateTime, UNIQUE_ID
+from xblock.validation import ValidationMessage
 from web_fragments.fragment import Fragment
 from webob.response import Response # Uses WSGI format(Web Server Gateway Interface) over HTTP to contact webwork
 from xblockutils.studio_editable import StudioEditableXBlockMixin
@@ -21,9 +22,14 @@ try:
 except ImportError:
     sub_api = None  # We are probably in the workbench. Don't use the submissions API
 
-WWSERVERLIST = {
+WWSERVERAPILIST = {
     'TechnionFullWW':'https://webwork2.technion.ac.il/webwork2/html2xml',
     'LocalStandAloneWW':'http://WWStandAlone:3000/render-api',
+}
+
+WWSERVERFILESLIST = {
+    'TechnionFullWW':'https://webwork2.technion.ac.il/webwork2_files',
+    'LocalStandAloneWW':'error',
 }
 
 # SERVER = 'TechnionFullWW'
@@ -98,10 +104,16 @@ STANDALONE_RESPONSE_PARAMETERS_CORRECT = dict(STANDALONE_RESPONSE_PARAMETERS_BAS
 class WeBWorKXBlockError(RuntimeError):
     pass
 
+# FIXME - this should be kept in a different file, clearing keeping the code from that
+# project seperate from that of this project.
 class StudentViewUserStateMixin:
     """
     This class has been copy-pasted from the problem-builder xblock file mixins.py
-    it provides student_view_user_state view.
+    https://github.com/open-craft/problem-builder/blob/master/problem_builder/mixins.py
+    which is licensed under the GNU AFFERO GENERAL PUBLIC LICENSE version 3
+    https://github.com/open-craft/problem-builder/blob/master/LICENSE
+
+    This code provides student_view_user_state view.
 
     To prevent unnecessary overloading of the build_user_state_data method,
     you may specify `USER_STATE_FIELDS` to customize build_user_state_data
@@ -192,44 +204,159 @@ class WeBWorKXBlock(
     icon_class = 'problem'
     category = 'ww-problem'
 
+# FIXME
+    main_settings = None
+    def reload_main_setting(self):
+        self.main_settings = self.course.other_course_settings.get('webwork_settings', {})
+
+    def get_default_server(self):
+        return self.main_settings.get('course_defaults',{}).get('default_server')
+
+    # Current server connection related settings
+    current_server_settings = {}
+
+    def clear_current_server_settings(self):
+        self.current_server_settings.clear()
+
+    def set_current_server_settings(self):
+        self.clear_current_server_settings()
+        if self.settings_type == 1:
+            # Use the course-wide settings for the relevant ww_server_id
+            self.current_server_settings.update(self.main_settings.get('server_settings',{}).get(self.ww_server_id, {}))
+            self.current_server_settings.update({"server_static_files_url":None}) # Not used by standalone
+        elif self.settings_type == 2:
+            # Use the locally set values from the specific XBlock instance
+            self.current_server_settings.update({  # Need str() on the first 2 to force into a final string form, and not __proxy__
+                "server_type":             str(self.ww_server_type),
+                "server_api_url":          str(self.ww_server_api_url),
+                "auth_data":               self.auth_data, # But not here - as it is a Dict
+            })
+            if self.ww_server_type == "html2ml":
+                self.current_server_settings.update({
+                    "server_static_files_url": str(self.ww_server_static_files_url)
+                })
+
+    def set_ww_server_id_options(self):
+        """
+        Set the list of course-wide ww_server_id options to display, pulled from the
+        other course settings data
+        """
+        options_to_offer = [ ]
+        my_default_server = self.get_default_server()
+        if my_default_server:
+            options_to_offer.append(my_default_server)
+        server_list = self.main_settings.get('server_settings',{}).keys()
+        if server_list:
+            for sid in server_list:
+                if sid != my_default_server:
+                    options_to_offer.append(sid)
+        if not options_to_offer:
+            options_to_offer.append("None available from course settings")
+        self.ww_server_id_options = options_to_offer
+
     # ----------- External, editable fields -----------
     editable_fields = (
-        'ww_server_type', 'ww_server', 'ww_course', 'ww_username', 'ww_password',
-        'display_name', 'problem', 'max_allowed_score', 'max_attempts', 'show_answers'
+        # Main settings
+        'settings_type',
+        # For ID based server setting from course settings
+        'ww_server_id_options',
+        'ww_server_id',
+        # For manual server setting
+        'ww_server_type', 'ww_server_api_url', 'ww_server_static_files_url', 'auth_data',
+        # Main problem settings
+        'problem', 'max_allowed_score', 'max_attempts',
+        # For html2xml only:
+        'ww_course', 'ww_username', 'ww_password',
+        # Less important settings
+        'show_answers',
+        'post_deadline_lockdown',
+        'iframe_min_height', 'iframe_max_height', 'iframe_min_width',
+        'display_name',
+        # Need in Studio but should be hidden from end-user
+        'settings_are_dirty'
         )
+
+    settings_type = Integer(
+       display_name = _("Settings type"),
+       scope = Scope.settings,
+       values=[
+            {"display_name": "Provided by course via \"Other Course Settings\"", "value": 1},
+            {"display_name": "Manual settings", "value": 2},
+       ],
+       default = 1,
+       help=_("ID of server - should have a record in the Other course settings dictionary - see the documentation"),
+    )
+
+    settings_are_dirty = Boolean(
+       scope = Scope.settings,
+       default = False
+    )
+
+    ww_server_id_options = String(
+       display_name = _("List of course wide server ID options"),
+       scope = Scope.settings,
+       help=_("Options of server IDs available in the course. This is a read only list!"),
+    )
+
+    ww_server_id = String(
+       display_name = _("ID of server"),
+       scope = Scope.settings,
+       default = None,
+       help=_("ID of server - enter an option from the list in ww_server_id_options."),
+    )
 
     ww_server_type = String(
        display_name = _("Type of server (html2xml or standalone)"),
-       scope = Scope.content,
+       scope = Scope.settings,
+       values=[
+            {"display_name": "standalone renderer", "value": "standalone"},
+            {"display_name": "html2xml interface on a regular server", "value": "html2xml"},
+       ],
        default = _(SERVERTYPE),
        help=_("This is the type of webwork server rendering and grading the problems (html2xml or standalone)."),
     )
 
-    ww_server = String(
-       display_name = _("WeBWorK server address"),
-       default = _(WWSERVERLIST[SERVER]),
-       scope = Scope.content,
-       help=_("This is the full URL of the webwork server."),
+    ww_server_api_url = String(
+       display_name = _("WeBWorK server address with API endoint"),
+       # FIXME - this should depend on a main course setting
+       default = _(WWSERVERAPILIST[SERVER]),
+       scope = Scope.settings,
+       help=_("This is the full URL of the webwork server including the path to the html2xml or render-api endpoint."),
     )
 
+    ww_server_static_files_url = String(
+       display_name = _("WeBWorK server address with path for static files"),
+       # FIXME - this should depend on a main course setting
+       default = _(WWSERVERFILESLIST[SERVER]),
+       scope = Scope.settings,
+       help=_("This is the URL of the path to static files on the webwork server."),
+    )
+
+    auth_data = Dict(
+       display_name = _("Authentication settings for the server"),
+       scope = Scope.settings,
+       help=_("This is the authentication data needed to interface with the server. Required fields depend on the servert type."),
+    )
+
+    # Moved into external settings - "Other course settings" data structure
     ww_course = String(
        display_name = _("WeBWorK course"),
        default = _("daemon_course"),
-       scope = Scope.content,
+       scope = Scope.settings,
        help=_("This is the course name to use when interfacing with the html2xml interface on a regular webwork server."),
     )
 
     ww_username = String(
        display_name = _("WeBWorK username"),
        default = _("daemon"),
-       scope = Scope.content,
+       scope = Scope.settings,
        help=_("This is the username to use when interfacing with the html2xml interface on a regular webwork server."),
     )
 
     ww_password = String(
        display_name = _("WeBWorK password"),
        default = _("wievith3Xos0osh"),
-       scope = Scope.content,
+       scope = Scope.settings,
        help=_("This is the password to use when interfacing with the html2xml interface on a regular webwork server."),
     )
 
@@ -249,7 +376,7 @@ class WeBWorKXBlock(
         # default = "part01a.pg",
         # Next line is for when working with local docker StandAlone webwork
         # default = "Library/SUNYSB/functionComposition.pg",
-        scope = Scope.settings,
+        scope = Scope.settings, # settings, so a course can modify, if needed
         help = _("The path to load the problem from."),
     )
 
@@ -267,12 +394,54 @@ class WeBWorKXBlock(
         help = _("Max number of allowed submissions (0 = unlimited)"),
     )
 
+    post_deadline_lockdown = Integer(
+        display_name = _("Post deadline lockdown period (in hours) when submission is not permitted"),
+        default = 24,
+        scope = Scope.settings,
+        help = _("How long, in hours, should the problem be locked after the deadline (except during the grace period) before submission is allowed again (0 = no delay)"),
+    )
+
     show_answers = Boolean(
         display_name = _("Show Answers"),
         default = False,
         scope = Scope.settings,
         help = _("Allow students to view correct answers?"),
     )
+
+    custom_parameters = List(
+        # FIXME
+        display_name=_("Custom Parameters"),
+        help=_("Add the key/value pair for any custom parameters. Ex. [\"setting1=71\", \"setting2=white\"]"),
+        scope=Scope.settings
+    )
+
+    iframe_min_height = Integer(
+        display_name=_("Iframe Minimum Height"),
+        help=_(
+            "Enter the desired minimum pixel height of the iframe which will contain the problem. "
+        ),
+        default=50,
+        scope=Scope.settings
+    )
+
+    iframe_max_height = Integer(
+        display_name=_("Iframe Maximum Height"),
+        help=_(
+            "Enter the desired maximum pixel height of the iframe which will contain the problem. "
+        ),
+        default=500,
+        scope=Scope.settings
+    )
+
+    iframe_min_width = Integer(
+        display_name=_("Iframe Minimum Width"),
+        help=_(
+            "Enter the desired minimum pixel width of the iframe which will contain the problem. "
+        ),
+        default=500,
+        scope=Scope.settings
+    )
+
 
     # ----------- Internal student fields -----------
     student_answer = Dict(
@@ -315,6 +484,22 @@ class WeBWorKXBlock(
     )
 
 
+
+    def validate_field_data(self, validation, data):
+        if not isinstance(data.custom_parameters, list):
+            _ = self.runtime.service(self, "i18n").ugettext
+            validation.add(ValidationMessage(ValidationMessage.ERROR, str(
+                _("Custom Parameters must be a list")
+            )))
+
+    @property
+    def course(self):
+        """
+        Return course by course id.
+        """
+        return self.runtime.modulestore.get_course(self.runtime.course_id)
+
+
     # ---------- Utils --------------
 
     def _problem_from_json(self,response_json):
@@ -323,9 +508,13 @@ class WeBWorKXBlock(
         #     everything between <body> and </body>
         # and then the JS loads
         #     between <!-- JS Loads --> and BEFORE <title>
+        fixed_state = 'Error' # Fallback
 
+        if response_json is None:
+            return 'Error'
         # Replace source address where needed
-        if self.ww_server_type == 'html2xml':
+        #if self.ww_server_type == 'html2xml':
+        if self.current_server_settings.get("server_type","") == 'html2xml':
             raw_state = \
                 response_json["body_part100"] + response_json["body_part300"] + \
                 response_json["body_part500"] + response_json["body_part530"] + \
@@ -333,9 +522,14 @@ class WeBWorKXBlock(
                 response_json["body_part710"] + response_json["body_part780_optional"] + \
                 response_json["body_part790"] + response_json["body_part999"][:-16] + \
                 response_json["head_part200"]
-            fixed_state = raw_state.replace(
-                 "\"/webwork2_files", "\"https://webwork2.technion.ac.il/webwork2_files" )
-        elif self.ww_server_type == 'standalone':
+            # Attempt to fix relative URLs for static files
+            fix_url = self.current_server_settings.get('server_static_files_url')
+            if fix_url:
+                fixed_state = raw_state.replace(
+                     "\"/webwork2_files", "\"" + fix_url )
+            else:
+                fixed_state = raw_state
+        elif self.current_server_settings.get("server_type","") == 'standalone':
             # raw_state = str(response_json.content)
             # fixed_state = raw_state.replace(
             #     '/webwork2_files', 'http://WWStandAlone:3000/webwork2_files')
@@ -345,7 +539,9 @@ class WeBWorKXBlock(
 
         return fixed_state
 
-    def _result_from_json_html2xml(self,response_json):
+    def _result_from_json_html2xml_split_json(self,response_json):
+        if response_json is None:
+            return "Error"
         return response_json["body_part300"]
 
     def _result_from_json_standalone(self,response_json):
@@ -365,7 +561,7 @@ class WeBWorKXBlock(
 #               '  problem_state: '  + response_json["problem_state"] + ' }'
 
     @staticmethod
-    def _sanitize_html2xml(request):
+    def _sanitize_request_html2xml(request):
         for action in (
             HTML2XML_REQUEST_PARAMETERS, HTML2XML_RESPONSE_PARAMETERS_CORRECT,
             HTML2XML_RESPONSE_PARAMETERS_PREVIEW, HTML2XML_RESPONSE_PARAMETERS_CHECK
@@ -374,7 +570,7 @@ class WeBWorKXBlock(
                 request.pop(key, None)
 
     @staticmethod
-    def _sanitize_standalone(request):
+    def _sanitize_request_standalone(request):
         for action in (
             STANDALONE_REQUEST_PARAMETERS, STANDALONE_RESPONSE_PARAMETERS_CORRECT,
             STANDALONE_RESPONSE_PARAMETERS_PREVIEW, STANDALONE_RESPONSE_PARAMETERS_CHECK
@@ -382,19 +578,31 @@ class WeBWorKXBlock(
             for key in action:
                 request.pop(key, None)
 
-    def request_webwork_html2xml(self, params):
+    def request_webwork_html2xml_split_json(self, params):
         # html2xml uses HTTP GET
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
-        # probably need something like date = { params, 'courseID':str(self.ww_course), ... }
-        return requests.get(self.ww_server, params=dict(
+
+        # Get updated main course settings from main course "Other course settings"
+        # Do this now, as we may need updated main connection settings
+        self.reload_main_setting()
+        # and then
+        self.set_current_server_settings()
+
+        my_url = self.current_server_settings.get("server_api_url")
+        my_auth_data = self.current_server_settings.get("auth_data",{})
+        if my_url:
+            my_res = requests.get(my_url, params=dict(
                     params,
-                    courseID=str(self.ww_course),
-                    userID=str(self.ww_username),
-                    course_password=str(self.ww_password),
+                    courseID=my_auth_data.get('ww_course','error'),
+                    userID=my_auth_data.get('ww_username','error'),
+                    course_password=my_auth_data.get('ww_password','error'),
                     problemSeed=str(self.seed),
                     psvn=str(self.psvn),
                     sourceFilePath=str(self.problem)
-                )).json()
+                ))
+        if my_res:
+            return my_res.json()
+        return None
 
     def request_webwork_standalone(self, params):
         # Standalone uses HTTP POST
@@ -403,15 +611,27 @@ class WeBWorKXBlock(
         # remember the URL needs to have :3000/render-api
         # and outputFormat set to "simple" and format set to "json".
         # Check by examining form parameters from Rederly UI on "render" call.
-        return requests.post(self.ww_server, params=dict(
+
+        # Get updated main course settings from main course "Other course settings"
+        # Do this now, as we may need updated main connection settings
+
+        self.reload_main_setting()
+        # and then
+        self.set_current_server_settings()
+
+        my_url = self.current_server_settings.get("server_api_url")
+        if my_url:
+            my_res = requests.post(my_url, params=dict(
                     params,
-                    #courseID=str(self.ww_course),
-                    #userID=str(self.ww_username),
-                    #course_password=str(self.ww_password),
+                    # standalone does not have course/user/password
                     problemSeed=str(self.seed),
                     psvn=str(self.psvn),
                     sourceFilePath=str(self.problem)
-                )).json()
+                ))
+            if my_res:
+                return my_res.json()
+            return None;
+            
 
     # ----------- Grading -----------
     """
@@ -465,15 +685,24 @@ class WeBWorKXBlock(
         The primary view of the XBlock, shown to students
         when viewing courses.
         """
-        if self.ww_server_type == 'html2xml':
-            return self.student_view_html2xml(self)
-        if self.ww_server_type == 'standalone':
+
+        # Get updated main course settings from main course "Other course settings"
+        # Do this now, as we may need updated main connection settings
+        self.reload_main_setting()
+        # and then
+        self.set_current_server_settings()
+
+        if self.current_server_settings.get("server_type") == 'html2xml':
+            return self.student_view_html2xml_no_iframe(self)
+        if self.current_server_settings.get("server_type") == 'standalone':
             return self.student_view_standalone(self)
-        return 'Error'
+        return self.student_view_error(self)
 
     # ----------- View for html2xml -----------
 
-    def student_view_html2xml(self, context=None, show_detailed_errors=False):
+    #FIXME
+    #def student_view_html2xml_no_iframe(self, context=None, show_detailed_errors=False):
+    def student_view_html2xml_no_iframe(self, context=None, show_detailed_errors=True):
         """
         The primary view of the XBlock, shown to students
         when viewing courses. For html2xml interface use
@@ -487,22 +716,24 @@ class WeBWorKXBlock(
         if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
             disabled = True
 
-        form = self._problem_from_json(self.request_webwork_html2xml(HTML2XML_REQUEST_PARAMETERS))
+        form = self._problem_from_json(self.request_webwork_html2xml_split_json(HTML2XML_REQUEST_PARAMETERS))
 
         # hide the show answers button
         if not self.show_answers:
             form += "<style> input[name='WWcorrectAns']{display: none !important;}</style>"
 
-        html = self.resource_string("static/html/webwork.html")
+        html = self.resource_string("static/html/webwork_html2xml_no_iframe.html")
         frag = Fragment(html.format(self=self,form=form))
         frag.add_css(self.resource_string("static/css/webwork.css"))
-        frag.add_javascript(self.resource_string("static/js/src/webwork_html2xml.js"))
-        frag.initialize_js('WeBWorKXBlock')
+        frag.add_javascript(self.resource_string("static/js/src/webwork_html2xml_no_iframe.js"))
+        frag.initialize_js('WeBWorKXBlockHtml2xmlNoIframe')
         return frag
 
     # ----------- View for standalone -----------
 
-    def student_view_standalone(self, context=None, show_detailed_errors=False):
+    # FIXME
+    #def student_view_standalone(self, context=None, show_detailed_errors=False):
+    def student_view_standalone(self, context=None, show_detailed_errors=True):
         """
         The primary view of the XBlock, shown to students
         when viewing courses. For standalone renderer use
@@ -521,8 +752,33 @@ class WeBWorKXBlock(
            ).replace( "\"", "&quot;" )  # srcdoc needs double quotes encoded. Must do second.
            #.replace( "\n", "" )
 
+        #test123 = self.course.other_course_settings.get('ww_standalone')
+        #test123a = test123[ "test1" ]
+        test123 = self.current_server_settings
+        my_st = "error reading server type  from self.current_server_settings"
+        try:
+            test123a = json.dumps(test123,skipkeys=True)
+        except TypeError:
+            test123a = "could not provide self.current_server_settings"
+        try:
+            my_st = self.current_server_settings.get("server_type","")
+        except:
+            my_st = "hit here"
+        tmp1 = "temp value"
+        if  my_st == 'standalone':
+            tmp1 = "reports == standalone"
+        else:
+            tmp1 = "reports != standalone"
+        test123a = test123a + "   " + my_st + tmp1
+
         iframe_id = 'rendered-problem-' + self.unique_id;
-        iframe_resize_init = '<script type="text/javascript">//<![CDATA[\n iFrameResize({ checkOrigin: false, scrolling: true, minHeight: 50, maxHeight: 500, minWidth: 600 }, "#' + iframe_id + '")\n //]]></script>'
+        iframe_resize_init = \
+           '<script type="text/javascript">//<![CDATA[\n iFrameResize({ ' + \
+           'checkOrigin: false, scrolling: true' + \
+           ', minHeight: ' + str(self.iframe_min_height) + \
+           ', maxHeight: ' + str(self.iframe_max_height) + \
+           ', minWidth: '  + str(self.iframe_min_width)  + \
+           '}, "#' + iframe_id + '")\n //]]></script>'
 
         # FIXME hide the show answers button
         # FIXME - the standalone renderer should do this
@@ -530,14 +786,14 @@ class WeBWorKXBlock(
         html = self.resource_string("static/html/webwork_standalone.html")
         js1  = self.resource_string("static/js/src/webwork_standalone.js")
 
-        frag = Fragment(html.format(self=self,srcdoc=mysrcdoc,unique_id=self.unique_id,iFrameInit=iframe_resize_init))
+        frag = Fragment(html.format(self=self,srcdoc=mysrcdoc,unique_id=self.unique_id,iFrameInit=iframe_resize_init,test123a=test123a))
 
         frag.add_javascript_url('https://cdnjs.cloudflare.com/ajax/libs/iframe-resizer/4.2.9/iframeResizer.js')
 
         frag.add_css(self.resource_string("static/css/webwork.css"))
         frag.add_javascript( js1 )
 
-        frag.initialize_js('WeBWorKXBlock', {
+        frag.initialize_js('WeBWorKXBlockStandalone', {
           'unique_id' : self.unique_id,
           'rpID' : iframe_id
         })
@@ -545,10 +801,25 @@ class WeBWorKXBlock(
         return frag
 
 
+    # ----------- View for error -----------
 
-    # ----------- Handler for htm2lxml-----------
+    def student_view_error(self, context=None, show_detailed_errors=False):
+        """
+        The primary view of the XBlock, shown to students
+        when viewing courses. When error hit
+        """
+
+        form = ""
+
+        html = self.resource_string("static/html/webwork_html2xml_no_iframe.html")
+        frag = Fragment(html.format(self=self,form=form))
+        frag.add_css(self.resource_string("static/css/webwork.css"))
+        return frag
+
+
+    # ----------- Handler for htm2lxml_no_iframe-----------
     @XBlock.handler
-    def submit_webwork_html2xml(self, request_original, suffix=''):
+    def submit_webwork_html2xml_no_iframe(self, request_original, suffix=''):
         """
         Handle the student's submission.
         """
@@ -563,7 +834,7 @@ class WeBWorKXBlock(
         try:
             # Copy the request
             request = request_original.json.copy()
-            self._sanitize_html2xml(request)
+            self._sanitize_request_html2xml(request)
 
             # Handle check answer
             if request["submit_type"] == "WWsubmit":
@@ -598,10 +869,10 @@ class WeBWorKXBlock(
             # Looks good! Send the data to WeBWorK
             request.update(response_parameters)
 
-            webwork_response = self.request_webwork_html2xml(request)
+            webwork_response = self.request_webwork_html2xml_split_json(request)
             # This is the "answer" that is documented in the mysql DB tables.
             # TODO: We need to build a better JSON object to store
-            response["data"] = self._result_from_json_html2xml(webwork_response)
+            response["data"] = self._result_from_json_html2xml_split_json(webwork_response)
 
             if response["scored"]:
                 score = Score(raw_earned = webwork_response["score"], raw_possible = self.max_score())
@@ -654,9 +925,9 @@ class WeBWorKXBlock(
         try:
             # Copy the request
             request = request_original.json.copy()
-            self._sanitize_standalone(request)
+            self._sanitize_request_standalone(request)
 
-            
+
             # Handle check answer
             if request["submit_type"] == "submitAnswers":
 
@@ -683,7 +954,7 @@ class WeBWorKXBlock(
             # Handle preview answer
             elif request["submit_type"] == "previewAnswers":
                 response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
-                
+
             else:
                 raise WeBWorKXBlockError("Unknown submit button used")
 
@@ -790,6 +1061,42 @@ class WeBWorKXBlock(
             return datetime.datetime.now(datetime.timezone.utc) > close_date
         return False
 
+
+    def studio_view(self, context):
+        """
+        Get Studio View fragment
+        """
+
+        # Get updated main course settings from main course "Other course settings"
+        # Do this now, before presenting the options, etc.
+        self.reload_main_setting()
+
+        #DELETE THIS#self.main_settings = self.course.other_course_settings.get('webwork_settings', {})
+        # The set the list of server_id_options to be displayed
+        self.set_ww_server_id_options()
+
+        # When relevant - set a default value for ww_server_id
+        if not self.ww_server_id and self.settings_type == 1:
+            # No setting currently set, but in server_id mode - so set the default
+            default_server = self.main_settings.get('course_defaults',{}).get('default_server')
+            if default_server:
+                self.ww_server_id = default_server
+
+# FIXME GGGGGGGGGGG
+#        if self.default_server:
+#            self.default_server_type = self.main_settings.get( self.default_server, {} ).get( "server_type" )
+#        else:
+#            self.default_server_type = None
+
+        # Initialize the choices
+        # GGGGGGGGGG
+        fragment = super().studio_view(context)
+
+        fragment.add_javascript(self.resource_string("static/js/xblock_studio_view.js"))
+
+        fragment.initialize_js('WebWorkXBlockInitStudio')
+
+        return fragment
 
     # ----------- Extras -----------
     @staticmethod
