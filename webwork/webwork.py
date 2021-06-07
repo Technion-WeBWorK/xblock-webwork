@@ -21,6 +21,7 @@ from cms.djangoapps.models.settings.course_grading import CourseGradingModel
 from enum import IntFlag, unique
 from xmodule.util.duedate import get_extended_due_date
 
+from .sub_api import SubmittingXBlockMixin, sub_api
 
 WWSERVERAPILIST = {
     'TechnionFullWW':'https://webwork2.technion.ac.il/webwork2/html2xml',
@@ -297,6 +298,11 @@ class WeBWorKXBlock(
              self.reload_main_setting()
         return self.main_settings.get('course_defaults',{}).get('default_server')
 
+    def get_psvn_shift(self):
+        if self.main_settings == None:
+             self.reload_main_setting()
+        return int(self.main_settings.get('course_defaults',{}).get('psvn_shift',0))
+
     # Current server connection related settings
     current_server_settings = {}
 
@@ -349,7 +355,7 @@ class WeBWorKXBlock(
         # For manual server setting
         'ww_server_type', 'ww_server_api_url', 'ww_server_static_files_url', 'auth_data',
         # Main problem settings
-        'problem', 'max_allowed_score', 'max_attempts',
+        'problem', 'max_allowed_score', 'max_attempts', 'psvn_key',
         # For html2xml only:
         'ww_course', 'ww_username', 'ww_password',
         # Less important settings
@@ -549,11 +555,45 @@ class WeBWorKXBlock(
         help = _("Random seed for this student"),
     )
 
-    psvn = Integer(
-        default = 0,
+    # WeBWorK uses psvn to set a seed for groups of problems which need to have the same seed.
+    # In order to allow flexibility - this XBlock wants to allow the psvn value used for
+    # different groups of problems to vary. For example the same group of problems might be used
+    # in a "homework" assignment and later in a "review" assignment, so a different psvn would be
+    # desired for each. To this end, the collection of possible psvn values is a Dictionary with
+    # Scope.preferences so it has values available to all webwork problems in a course. However,
+    # Scope.preferences is really fixed for "content type" at the server level. As a result, we
+    # also use a course-level setting which is used to shift the values in each course.
+    # Each problem stored a psvn_name (Scope.user_state) which is used as they key to retrieve the
+    # desired value from the dictionary.
+    # The psvn for a specific problem is selected by pulling a value from the Diction
+
+
+    psvn_options = Dict(
+        default = {},
         scope = Scope.preferences,
-        help = _("Problem set version number, used to seed multi-part problems"),
+        help = _("Dictionary of options for PSVN" + " "
+             + "PSVN = problem set version number, used by WeBWorK to seed multi-part problems"),
     )
+
+    psvn_key = Integer(
+        default = 1,
+        scope = Scope.settings,
+        help = _("Key (an integer) for the PSVN to use for this problem. Selects from psvn_options." + " "
+             + "PSVN = problem set version number, used by WeBWorK to seed multi-part problems"),
+    )
+
+    def get_psvn(self):
+        """
+        Get the psvn for this problem. Create it if necessary.
+        """
+        # Note for some reason, the key as stored/retreived would not remain an integer - so force it into a string always.
+        # Otherwise the code did not work in LMS.
+        if str(self.psvn_key) in self.psvn_options.keys() and isinstance(self.psvn_options.get(str(self.psvn_key)),int):
+            return self.get_psvn_shift() + self.psvn_options.get(str(self.psvn_key))
+        else:
+            newpsvn = random.randint(1,500000)
+            self.psvn_options.update({str(self.psvn_key):newpsvn})
+            return self.get_psvn_shift() + newpsvn
 
     student_score = Float(
         default = 0,
@@ -673,7 +713,7 @@ class WeBWorKXBlock(
                     userID=my_auth_data.get('ww_username','error'),
                     course_password=my_auth_data.get('ww_password','error'),
                     problemSeed=str(self.seed),
-                    psvn=str(self.psvn),
+                    psvn=str(self.get_psvn()),
                     sourceFilePath=str(self.problem)
                 ))
         if my_res:
@@ -701,7 +741,7 @@ class WeBWorKXBlock(
                 params=dict(params,
                     # standalone does not have course/user/password
                     problemSeed=str(self.seed),
-                    psvn=str(self.psvn),
+                    psvn=str(self.get_psvn()),
                     sourceFilePath=str(self.problem)
                 ),
                 timeout = my_timeout)
@@ -793,8 +833,6 @@ class WeBWorKXBlock(
         if not self.seed:
             self.seed = random.randint(1,2**31-1)
 
-        if not self.psvn:
-            self.psvn = random.randint(1,500)
 
         if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
             disabled = True
@@ -825,9 +863,6 @@ class WeBWorKXBlock(
         if not self.seed:
             self.seed = random.randint(1,2**31-1)
 
-        if not self.psvn:
-            self.psvn = random.randint(1,500)
-
         if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
             disabled = True
 
@@ -836,9 +871,10 @@ class WeBWorKXBlock(
            ).replace( "\"", "&quot;" )  # srcdoc needs double quotes encoded. Must do second.
            #.replace( "<br/>", "" )
 
-        #test123 = self.course.other_course_settings.get('ww_standalone')
-        #test123a = test123[ "test1" ]
         test123 = self.current_server_settings
+        test123.update( {"psvn_options_": self.psvn_options })
+        test123.update({"psvn":self.get_psvn()})
+        test123.update({"unique_id":str(self.unique_id)})
         my_st = "error reading server type  from self.current_server_settings"
         try:
             test123a = json.dumps(test123,skipkeys=True)
