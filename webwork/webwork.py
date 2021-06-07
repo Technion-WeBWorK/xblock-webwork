@@ -7,7 +7,6 @@ import datetime
 import requests # Ease the contact with webwork server via HTTP/1.1
 import pkg_resources # Used here to return resource name as a string
 import six
-import pytz # python timezone
 from xblock.core import XBlock
 from django.utils.translation import ugettext_lazy as _
 from xblock.fields import String, Scope, Integer, List, Dict, Float, Boolean, DateTime, UNIQUE_ID
@@ -17,6 +16,8 @@ from webob.response import Response # Uses WSGI format(Web Server Gateway Interf
 from xblockutils.studio_editable import StudioEditableXBlockMixin
 from xblock.scorable import ScorableXBlockMixin, Score
 from xblock.completable import XBlockCompletionMode
+from cms.djangoapps.models.settings.course_grading import CourseGradingModel
+from enum import IntFlag, unique
 try:
     from submissions import api as sub_api
 except ImportError:
@@ -104,8 +105,37 @@ STANDALONE_RESPONSE_PARAMETERS_CORRECT = dict(STANDALONE_RESPONSE_PARAMETERS_BAS
 class WeBWorKXBlockError(RuntimeError):
     pass
 
+@unique # decorator to enforce different integer values for each period
+class PPeriods(IntFlag):
+    UnKnown = 0
+    PreDue = 1 # The problem due date is in the future
+    PostDue = 2
+    Locked =  3 # Problem locked for submissions/watch answers etc'
+    UnLocked = 4
+    PostDueLocked = PostDue * Locked 
+    PostDueUnLocked = PostDue * UnLocked
+        
+class WWProblemPeriod:
+    """ Neatly define getter and setter of problem periods """
+    def __init__(self, period=PPeriods.UnKnown):
+        self._period = period
+
+    @property
+    def period(self): #this is the period.getter
+        return self._period
+
+    @period.setter
+    def period(self, value):
+        if value.name not in set(item.name for item in PPeriods):
+            raise ValueError("Undefined period")
+        self._period = value
+
+    @period.deleter
+    def period(self):
+        self._period = PPeriods.UnKnown
+
 # FIXME - this should be kept in a different file, clearing keeping the code from that
-# project seperate from that of this project.
+# project separate from that of this project.
 class StudentViewUserStateMixin:
     """
     This class has been copy-pasted from the problem-builder xblock file mixins.py
@@ -199,10 +229,60 @@ class WeBWorKXBlock(
     """
     XBlock that uses WeBWorK's PG grader.
     """
-
     # Makes LMS icon appear as a problem
     icon_class = 'problem'
     category = 'ww-problem'
+
+    @property
+    def course(self):
+        """ Return course by course id."""
+        return self.runtime.modulestore.get_course(self.runtime.course_id)
+
+    def set_due_date(self):
+        try:
+            from xmodule.util.duedate import get_extended_due_date
+            self.due = get_extended_due_date(self)
+        except ImportError:
+            self.due = None
+
+
+    @property
+    def grace_timedelta(self): #plays both as getter and setter
+        try:
+            graceperiod = CourseGradingModel.fetch(self.course.id).grace_period
+        except AttributeError:
+            graceperiod = None
+
+        if graceperiod is not None:
+            self._grace_timedelta = datetime.timedelta(
+                hours = graceperiod['hours'],
+                minutes = graceperiod['minutes'],
+                seconds = graceperiod['seconds']
+                )
+        else:
+            self._grace_timedelta = datetime.timedelta( #FIXME
+                hours=0, minutes=0, seconds=0
+                )
+
+        return self._grace_timedelta
+
+    def set_problem_period(self):
+        Now = datetime.datetime.now(datetime.timezone.utc)
+        self.set_due_date()
+        Due = self.due
+        Grace = self.grace_timedelta
+        
+        if Due is not None and Grace is not None:
+            LockDate = Due + Grace
+            if Now < Due:
+                self.problem_period = PPeriods.PreDue
+            elif Now < LockDate:
+                self.problem_period = PPeriods.PostDueLocked
+            else:
+                self.problem_period = PPeriods.PostDueUnLocked
+        
+    def clear_problem_period(self):
+        del self._problem_period
 
 # FIXME
     main_settings = None
@@ -317,7 +397,7 @@ class WeBWorKXBlock(
     )
 
     ww_server_api_url = String(
-       display_name = _("WeBWorK server address with API endoint"),
+       display_name = _("WeBWorK server address with API endpoint"),
        # FIXME - this should depend on a main course setting
        default = _(WWSERVERAPILIST[SERVER]),
        scope = Scope.settings,
@@ -411,7 +491,7 @@ class WeBWorKXBlock(
     custom_parameters = List(
         # FIXME
         display_name=_("Custom Parameters"),
-        help=_("Add the key/value pair for any custom parameters. Ex. [\"setting1=71\", \"setting2=white\"]"),
+        help=_("Add the key/value pair for any custom parameters. Ex. [\"setting1=71\", \"setting2=white\']"),
         scope=Scope.settings
     )
 
@@ -483,22 +563,12 @@ class WeBWorKXBlock(
         help = _("A runtime unique ID for this instance of this XBlock."),
     )
 
-
-
     def validate_field_data(self, validation, data):
         if not isinstance(data.custom_parameters, list):
             _ = self.runtime.service(self, "i18n").ugettext
             validation.add(ValidationMessage(ValidationMessage.ERROR, str(
                 _("Custom Parameters must be a list")
             )))
-
-    @property
-    def course(self):
-        """
-        Return course by course id.
-        """
-        return self.runtime.modulestore.get_course(self.runtime.course_id)
-
 
     # ---------- Utils --------------
 
@@ -516,12 +586,12 @@ class WeBWorKXBlock(
         #if self.ww_server_type == 'html2xml':
         if self.current_server_settings.get("server_type","") == 'html2xml':
             raw_state = \
-                response_json["body_part100"] + response_json["body_part300"] + \
-                response_json["body_part500"] + response_json["body_part530"] + \
-                response_json["body_part550"] + response_json["body_part590"] + \
-                response_json["body_part710"] + response_json["body_part780_optional"] + \
-                response_json["body_part790"] + response_json["body_part999"][:-16] + \
-                response_json["head_part200"]
+                response_json['body_part100'] + response_json['body_part300'] + \
+                response_json['body_part500'] + response_json['body_part530'] + \
+                response_json['body_part550'] + response_json['body_part590'] + \
+                response_json['body_part710'] + response_json['body_part780_optional'] + \
+                response_json['body_part790'] + response_json['body_part999'][:-16] + \
+                response_json['head_part200']
             # Attempt to fix relative URLs for static files
             fix_url = self.current_server_settings.get('server_static_files_url')
             if fix_url:
@@ -533,7 +603,7 @@ class WeBWorKXBlock(
             # raw_state = str(response_json.content)
             # fixed_state = raw_state.replace(
             #     '/webwork2_files', 'http://WWStandAlone:3000/webwork2_files')
-            fixed_state = response_json["renderedHTML"]
+            fixed_state = response_json['renderedHTML']
         else:
             fixed_state = 'Error'
 
@@ -542,7 +612,7 @@ class WeBWorKXBlock(
     def _result_from_json_html2xml_split_json(self,response_json):
         if response_json is None:
             return "Error"
-        return response_json["body_part300"]
+        return response_json['body_part300']
 
     def _result_from_json_standalone(self,response_json):
         # Need data from
@@ -555,10 +625,10 @@ class WeBWorKXBlock(
         #   debug
         return "testing";
 # FIXME
-#        return '{ answers: '        + response_json["answers"] + \
-#               '  form_data: '      + response_json["form_data"] + \
-#               '  problem_result: ' + response_json["problem_result"] + \
-#               '  problem_state: '  + response_json["problem_state"] + ' }'
+#        return '{ answers: '        + response_json['answers'] + \
+#               '  form_data: '      + response_json['form_data'] + \
+#               '  problem_result: ' + response_json['problem_result'] + \
+#               '  problem_state: '  + response_json['problem_state'] + ' }'
 
     @staticmethod
     def _sanitize_request_html2xml(request):
@@ -666,7 +736,7 @@ class WeBWorKXBlock(
     def calculate_score(self):
         return self.CurrentScore
 
-    def max_score(self):
+    def get_max_score(self):
         """
         Get the max score
         """
@@ -678,6 +748,12 @@ class WeBWorKXBlock(
         """
         data = pkg_resources.resource_string(__name__, path)
         return data.decode("utf8")
+
+    def set_gracperiod(self):
+        try:
+            self.graceperiod = CourseGradingModel.fetch(self.course.id).grace_period
+        except AttributeError:
+            self.graceperiod = None
 
     # ----------- View -----------
     def student_view(self, context=None, show_detailed_errors=False):
@@ -738,6 +814,7 @@ class WeBWorKXBlock(
         The primary view of the XBlock, shown to students
         when viewing courses. For standalone renderer use
         """
+        #problem = self.store.get_item(self.problem.location)
         if not self.seed:
             self.seed = random.randint(1,2**31-1)
 
@@ -837,7 +914,7 @@ class WeBWorKXBlock(
             self._sanitize_request_html2xml(request)
 
             # Handle check answer
-            if request["submit_type"] == "WWsubmit":
+            if request['submit_type'] == "WWsubmit":
 
                 if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
                     raise WeBWorKXBlockError("Maximum allowed attempts reached")
@@ -847,12 +924,12 @@ class WeBWorKXBlock(
 
                 self.student_answer = request.copy()
                 self.student_attempts += 1
-                response["scored"] = True
+                response['scored'] = True
 
                 response_parameters = HTML2XML_RESPONSE_PARAMETERS_CHECK
 
             # Handle show correct answer
-            elif request["submit_type"] == "WWcorrectAns":
+            elif request['submit_type'] == "WWcorrectAns":
 
                 if not self.show_answers:
                     raise WeBWorKXBlockError("Answers may not be shown for this problem")
@@ -860,7 +937,7 @@ class WeBWorKXBlock(
                 response_parameters = HTML2XML_RESPONSE_PARAMETERS_CORRECT
 
             # Handle preview answer
-            elif request["submit_type"] == "preview":
+            elif request['submit_type'] == "preview":
                 response_parameters = HTML2XML_RESPONSE_PARAMETERS_PREVIEW
 
             else:
@@ -872,12 +949,12 @@ class WeBWorKXBlock(
             webwork_response = self.request_webwork_html2xml_split_json(request)
             # This is the "answer" that is documented in the mysql DB tables.
             # TODO: We need to build a better JSON object to store
-            response["data"] = self._result_from_json_html2xml_split_json(webwork_response)
+            response['data'] = self._result_from_json_html2xml_split_json(webwork_response)
 
-            if response["scored"]:
-                score = Score(raw_earned = webwork_response["score"], raw_possible = self.max_score())
+            if response['scored']:
+                score = Score(raw_earned = webwork_response['score'], raw_possible = self.get_max_score())
                 self.set_score(score)
-                response["score"] = self.CurrentScore.raw_earned
+                response['score'] = self.CurrentScore.raw_earned
 
             response['success'] = True
             response['message'] = "Success!"
@@ -894,7 +971,7 @@ class WeBWorKXBlock(
 
             self.runtime.publish(self, 'xblock.webwork.submitted', {
                 'num_attempts': self.student_attempts,
-                'submitted_answer': response["data"],
+                'submitted_answer': response['data'],
                 'grade': self.student_score,
             })
 
@@ -926,68 +1003,66 @@ class WeBWorKXBlock(
             # Copy the request
             request = request_original.json.copy()
             self._sanitize_request_standalone(request)
-
-
-            # Handle check answer
-            if request["submit_type"] == "submitAnswers":
-
-                if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
-                    raise WeBWorKXBlockError("Maximum allowed attempts reached")
-
-                if self.is_past_due():
-                    raise WeBWorKXBlockError("Problem deadline has passed")
-
-                self.student_answer = request.copy()
-                self.student_attempts += 1
-                response["scored"] = True
-
-                response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
-
-            # Handle show correct answer
-            elif request["submit_type"] == "showCorrectAnswers":
-
-                if not self.show_answers:
-                    raise WeBWorKXBlockError("Answers may not be shown for this problem")
-
-                response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
-
-            # Handle preview answer
-            elif request["submit_type"] == "previewAnswers":
-                response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
-
+            # TODO: Consider tranform into a match-case clause 
+            # after upgrading to python 3.10 and above
+            #===========Treat Predue submissions =================
+            self.set_problem_period()
+            if self.problem_period is PPeriods.PreDue:
+                if request['submit_type'] == "submitAnswers":
+                    if self.max_attempts > 0 and self.student_attempts > self.max_attempts:
+                        response['message'] = "Maximum allowed attempts reached"
+                    elif self.max_attempts == 0  or self.student_attempts <= self.max_attempts:
+                        # At last, set your valid response
+                        self.student_answer = request.copy()
+                        self.student_attempts += 1
+                        response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
+                        request.update(response_parameters)
+                        webwork_response = self.request_webwork_standalone(request)
+                        response['renderedHTML'] = self._problem_from_json(webwork_response)
+                        response['scored'] = True                            
+                        score = Score(
+                            raw_earned = webwork_response['problem_result']['score'], 
+                            raw_possible = self.get_max_score()
+                            )
+                        self.set_score(score)
+                        response['score'] = self.CurrentScore.raw_earned
+                        response['success'] = True
+                        response['message'] = "Success!"
+                        response['data'] = self._result_from_json_standalone(webwork_response)
+                elif request['submit_type'] == "showCorrectAnswers":
+                    raise WeBWorKXBlockError("Correct answers can be shown only after the due date")
+                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
+                elif request['submit_type'] ==  "previewAnswers":
+                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
+                    return True
+                else:
+                    raise WeBWorKXBlockError("Unknown submit button used")
+            #===========Treat PostDueLocked submissions ==========
+            elif self.problem_period is PPeriods.PostDueLocked:
+                if request['submit_type'] == "submitAnswers":
+                    raise WeBWorKXBlockError("Submissions are locked up until xxx")
+                elif request['submit_type'] == "showCorrectAnswers":
+                    raise WeBWorKXBlockError("Correct Answers will be accessible from xxx")
+                elif request['submit_type'] ==  "previewAnswers":
+                    return True
+                else:
+                    raise WeBWorKXBlockError("Unknown submit button used")
+            #===========Treat PostDueUnLocked submissions ========
+            elif self.problem_period is PPeriods.PostDueUnLocked:
+                if request['submit_type'] == "submitAnswers":
+                    return True
+                elif request['submit_type'] == "showCorrectAnswers":
+                    return True
+                elif request['submit_type'] ==  "previewAnswers":
+                    return True
+                else:
+                    raise WeBWorKXBlockError("Unknown submit button used")
+            #===========Unknown submission type =================
             else:
-                raise WeBWorKXBlockError("Unknown submit button used")
-
-            # Looks good! Send the data to WeBWorK
-
-            # FIXME - this is from the html2xml code
-
-            request.update(response_parameters)
-
-            webwork_response = self.request_webwork_standalone(request)
+                raise WeBWorKXBlockError("oops Problem is untreatable try later")
 
             # This is the "answer" that is documented in the mysql DB tables.
             # TODO: We need to build a better JSON object to store
-
-            # Here we do not need to add URL encoding for double quote '"' or ampersand '&'
-            response["renderedHTML"] = self._problem_from_json(webwork_response)
-
-            # FIXME hide the show answers button
-            # FIXME - the standalone renderer should do this
-
-            response["data"] = self._result_from_json_standalone(webwork_response)
-
-            # FIXME - this is from the html2xml code
-
-# FIXME
-            #if response["scored"]:
-            #    score = Score(raw_earned = webwork_response["score"], raw_possible = self.max_score())
-            #    self.set_score(score)
-            #    response["score"] = self.CurrentScore.raw_earned
-
-            response['success'] = True
-            response['message'] = "Success!"
-
             # Create a submission entry at courseware_studentmodule mysql57 table
 # FIXME
 #            if sub_api:
@@ -1003,7 +1078,7 @@ class WeBWorKXBlock(
 # FIXME
 #            self.runtime.publish(self, 'xblock.webwork.submitted', {
 #                'num_attempts': self.student_attempts,
-#                'submitted_answer': response["data"],
+#                'submitted_answer': response['data'],
 #                'grade': self.student_score,
 #            })
 
@@ -1016,50 +1091,6 @@ class WeBWorKXBlock(
                 content_type =  "application/json",
                 status = 200,
             )
-
-
-    # ---------- Due Date ----------
-    def utcnow():
-        """
-        Get current date and time in UTC
-        """
-        return datetime.datetime.now(tz=pytz.utc)
-
-    def is_past_due(self):
-        """
-        Is it now past this problem's due date?
-        """
-        return self.past_due()
-
-    def past_due(self):
-        """
-        Return whether due date has passed.
-        """
-        try:
-            # The try import clause probably placed here since the import
-            # works only under full devstack Edx environment but
-            # fails under xblock-sdk Edx environment which lacks
-            # the xmodule.
-            # TODO - verify proper work of this method in the devstack build
-            from xmodule.util.duedate import get_extended_due_date
-        except ImportError:
-            return False
-        due = get_extended_due_date(self)
-        try:
-            graceperiod = self.graceperiod
-        except AttributeError:
-            # graceperiod and due are defined in InheritanceMixin
-            # It's used automatically in edX but the unit tests will need to mock it out
-            graceperiod = None
-
-        if graceperiod is not None and due:
-            close_date = due + graceperiod
-        else:
-            close_date = due
-
-        if close_date is not None:
-            return datetime.datetime.now(datetime.timezone.utc) > close_date
-        return False
 
 
     def studio_view(self, context):
