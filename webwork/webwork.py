@@ -269,14 +269,15 @@ class WeBWorKXBlock(
     def set_problem_period(self):
         Now = datetime.datetime.now(datetime.timezone.utc)
         self.set_due_date()
-        Due = self.due
-        Grace = self.grace_timedelta
-        
-        if Due is not None and Grace is not None:
-            LockDate = Due + Grace
-            if Now < Due:
+        DueDate = self.due
+        GraceDuration = self.grace_timedelta
+        LockDuration = datetime.timedelta(hours = self.post_deadline_lockdown)
+        if DueDate is not None and GraceDuration is not None:
+            self.lock_date_begin = DueDate + GraceDuration
+            self.lock_date_end = self.lock_date_begin + LockDuration
+            if Now < self.lock_date_begin:
                 self.problem_period = PPeriods.PreDue
-            elif Now < LockDate:
+            elif Now < self.lock_date_end:
                 self.problem_period = PPeriods.PostDueLocked
             else:
                 self.problem_period = PPeriods.PostDueUnLocked
@@ -491,7 +492,7 @@ class WeBWorKXBlock(
     custom_parameters = List(
         # FIXME
         display_name=_("Custom Parameters"),
-        help=_("Add the key/value pair for any custom parameters. Ex. [\"setting1=71\", \"setting2=white\']"),
+        help=_("Add the key/value pair for any custom parameters. Ex. [\"setting1=71\", \"setting2=white\"]"),
         scope=Scope.settings
     )
 
@@ -1003,63 +1004,112 @@ class WeBWorKXBlock(
             # Copy the request
             request = request_original.json.copy()
             self._sanitize_request_standalone(request)
-            # TODO: Consider tranform into a match-case clause 
+            self.set_problem_period()
+            # TODO: Consider tranform into a match-case claus
             # after upgrading to python 3.10 and above
             #===========Treat Predue submissions =================
-            self.set_problem_period()
             if self.problem_period is PPeriods.PreDue:
                 if request['submit_type'] == "submitAnswers":
+                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
+                    request.update(response_parameters)
                     if self.max_attempts > 0 and self.student_attempts > self.max_attempts:
-                        response['message'] = "Maximum allowed attempts reached"
-                    elif self.max_attempts == 0  or self.student_attempts <= self.max_attempts:
-                        # At last, set your valid response
+                        # Do nothing aside adequate failure message
+                        response['message'] = "Sorry, can't submit since your maximum allowed attempts reached"
+                    else:
+                        # At last...Conditions for positive request treatment are met:
+                        # 1. self.max_attempts==0 or self.student_attempts <= self.max_attempts
+                        # 2. request==submitAnswers
+                        # 3. period==PreDue + small enough student_attempts
+                        # So send a request to webwork (with the student answer)
+                        # and deliver it's response to the student + save it to edx submission database
                         self.student_answer = request.copy()
                         self.student_attempts += 1
-                        response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
-                        request.update(response_parameters)
                         webwork_response = self.request_webwork_standalone(request)
                         response['renderedHTML'] = self._problem_from_json(webwork_response)
-                        response['scored'] = True                            
+                        response['scored'] = True
                         score = Score(
                             raw_earned = webwork_response['problem_result']['score'], 
                             raw_possible = self.get_max_score()
                             )
                         self.set_score(score)
                         response['score'] = self.CurrentScore.raw_earned
-                        response['success'] = True
-                        response['message'] = "Success!"
                         response['data'] = self._result_from_json_standalone(webwork_response)
+                        response['success'] = True
+                        response['message'] = "Successfull scored request treatment!"
                 elif request['submit_type'] == "showCorrectAnswers":
-                    raise WeBWorKXBlockError("Correct answers can be shown only after the due date")
                     response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
+                    request.update(response_parameters)
+                    response['success'] = False
+                    response['message'] = (
+                        "Invalid request: Correct answers can be shown only after " +
+                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
+                    )
                 elif request['submit_type'] ==  "previewAnswers":
                     response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
-                    return True
+                    request.update(response_parameters)
+                    webwork_response = self.request_webwork_standalone(request)
+                    response['renderedHTML'] = self._problem_from_json(webwork_response)
+                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    response['success'] = True
+                    response['message'] = "Successfull request treatment!"
                 else:
                     raise WeBWorKXBlockError("Unknown submit button used")
             #===========Treat PostDueLocked submissions ==========
             elif self.problem_period is PPeriods.PostDueLocked:
                 if request['submit_type'] == "submitAnswers":
-                    raise WeBWorKXBlockError("Submissions are locked up until xxx")
+                    # Do nothing aside adequate failure message
+                    response['message'] = (
+                        "Sorry, can't submit: Submissions are locked up until " +
+                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
+                    )
                 elif request['submit_type'] == "showCorrectAnswers":
-                    raise WeBWorKXBlockError("Correct Answers will be accessible from xxx")
+                    # Do nothing aside adequate failure message
+                    response['message'] = (
+                        "Sorry, show correct answers is locked up until " +
+                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
+                    )
                 elif request['submit_type'] ==  "previewAnswers":
-                    return True
+                    # Do nothing aside adequate failure message
+                    response['message'] = (
+                        "Sorry, previewing answers is locked up until" +
+                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
+                    )
                 else:
                     raise WeBWorKXBlockError("Unknown submit button used")
             #===========Treat PostDueUnLocked submissions ========
             elif self.problem_period is PPeriods.PostDueUnLocked:
                 if request['submit_type'] == "submitAnswers":
-                    return True
+                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
+                    request.update(response_parameters)
+                    self.student_answer = request.copy()
+                    webwork_response = self.request_webwork_standalone(request)
+                    response['renderedHTML'] = self._problem_from_json(webwork_response)
+                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    response['success'] = True
+                    response['message'] = "Successfull unscored request treatment!"
                 elif request['submit_type'] == "showCorrectAnswers":
-                    return True
+                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
+                    request.update(response_parameters)
+                    webwork_response = self.request_webwork_standalone(request)
+                    response['renderedHTML'] = self._problem_from_json(webwork_response)
+                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    response['success'] = True
+                    response['message'] = "Successfull request treatment!"
                 elif request['submit_type'] ==  "previewAnswers":
-                    return True
+                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
+                    request.update(response_parameters)
+                    webwork_response = self.request_webwork_standalone(request)
+                    response['renderedHTML'] = self._problem_from_json(webwork_response)
+                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    response['success'] = True
+                    response['message'] = "Successfull request treatment!"
                 else:
                     raise WeBWorKXBlockError("Unknown submit button used")
-            #===========Unknown submission type =================
+            #===========Unknown problem period =================
             else:
-                raise WeBWorKXBlockError("oops Problem is untreatable try later")
+                raise WeBWorKXBlockError(
+                    "Oops Problem period is undefined, thus request can't be treated!"
+                    )
 
             # This is the "answer" that is documented in the mysql DB tables.
             # TODO: We need to build a better JSON object to store
