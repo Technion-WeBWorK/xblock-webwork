@@ -8,9 +8,11 @@ import requests # Ease the contact with webwork server via HTTP/1.1
 import pkg_resources # Used here to return resource name as a string
 import six
 import pytz # python timezone
+from pytz import utc
 from xblock.core import XBlock
 from django.utils.translation import ugettext_lazy as _
 from xblock.fields import String, Scope, Integer, List, Dict, Float, Boolean, DateTime, UNIQUE_ID
+from xmodule.fields import Date
 from xblock.validation import ValidationMessage
 from web_fragments.fragment import Fragment
 from webob.response import Response # Uses WSGI format(Web Server Gateway Interface) over HTTP to contact webwork
@@ -21,7 +23,19 @@ from cms.djangoapps.models.settings.course_grading import CourseGradingModel
 from enum import IntFlag, unique
 from xmodule.util.duedate import get_extended_due_date
 
-from .sub_api import SubmittingXBlockMixin, sub_api
+# Next line needed only if we decide to use the submissions API
+#from .sub_api import SubmittingXBlockMixin, sub_api
+
+# Lines to allow logging to console.
+# Taken from https://gitlab.edvsz.hs-osnabrueck.de/lhannigb/showblock/-/blob/master/showblock/showblock.py
+#import logging
+#DEBUGLVL = logging.INFO
+#logger = logging.getLogger(__name__)
+#logger.setLevel(DEBUGLVL)
+#ch = logging.StreamHandler()
+#ch.setLevel(DEBUGLVL)
+#ogger.addHandler(ch)
+# End lines taken from https://gitlab.edvsz.hs-osnabrueck.de/lhannigb/showblock/-/blob/master/showblock/showblock.py
 
 WWSERVERAPILIST = {
     'TechnionFullWW':'https://webwork2.technion.ac.il/webwork2/html2xml',
@@ -52,7 +66,7 @@ HTML2XML_REQUEST_PARAMETERS = dict(HTML2XML_PARAMETERS, **{
 
 # FIXME  - Increase by 1 from current answersSubmitted
 HTML2XML_RESPONSE_PARAMETERS_BASE = dict(HTML2XML_PARAMETERS, **{
-    "psvn" : "54321",
+    #"psvn" : "54321",  # Does not seem to belong here
     "showSummary" : "1",
     "answersSubmitted": "1"
 })
@@ -85,7 +99,7 @@ STANDALONE_REQUEST_PARAMETERS = dict(STANDALONE_PARAMETERS, **{
 
 # FIXME  - Increase by 1 from current answersSubmitted
 STANDALONE_RESPONSE_PARAMETERS_BASE = dict(STANDALONE_PARAMETERS, **{
-    "psvn" : "54321",
+    #"psvn" : "54321",  # Does not seem to belong here
     "showSummary" : "1",
     "answersSubmitted": "1"
 })
@@ -101,6 +115,30 @@ STANDALONE_RESPONSE_PARAMETERS_PREVIEW = dict(STANDALONE_RESPONSE_PARAMETERS_BAS
 STANDALONE_RESPONSE_PARAMETERS_CORRECT = dict(STANDALONE_RESPONSE_PARAMETERS_BASE, **{
     "WWcorrectAns": "Show Correct Answers"
 })
+
+# Fields from the answer hash data we want to save
+ANSWER_FIELDS_TO_SAVE = [
+  "ans_label",
+  "ans_message",
+  "ans_name",
+  "cmp_class",
+  "correct_ans_latex_string",
+  "correct_value",
+  "error_message",
+  "original_student_ans",
+  "preview_latex_string",
+  "score",
+  "student_formula",
+  "student_value",
+  "type"
+]
+
+# Fields from Standalone "form_data" we want to save - shows what was processed
+STANDALONE_FORM_SETTINGS_TO_SAVE = [
+  'problemSeed',
+  'psvn',
+  'sourceFilePath'
+]
 
 class WeBWorKXBlockError(RuntimeError):
     pass
@@ -226,7 +264,9 @@ class SubmittingXBlockMixin:
 @XBlock.needs("user")
 class WeBWorKXBlock(
     ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin,
-    SubmittingXBlockMixin, StudentViewUserStateMixin):
+    #SubmittingXBlockMixin,  # Needed if using the the submissions API
+#    StudentViewUserStateMixin # apparently not needed - grades/state saving without it
+    ):
     """
     XBlock that uses WeBWorK's PG grader.
     """
@@ -494,7 +534,7 @@ class WeBWorKXBlock(
     )
 
     custom_parameters = List(
-        # FIXME
+        # FIXME - for future use
         display_name=_("Custom Parameters"),
         help=_("Add the key/value pair for any custom parameters. Ex. [\"setting1=71\", \"setting2=white\"]"),
         scope=Scope.settings
@@ -555,6 +595,12 @@ class WeBWorKXBlock(
         help = _("Random seed for this student"),
     )
 
+    submission_data_to_save = Dict(
+        default = None,
+        scope = Scope.user_state,
+        help = _("Data to save as part of a submission."),
+    )
+
     # WeBWorK uses psvn to set a seed for groups of problems which need to have the same seed.
     # In order to allow flexibility - this XBlock wants to allow the psvn value used for
     # different groups of problems to vary. For example the same group of problems might be used
@@ -595,10 +641,16 @@ class WeBWorKXBlock(
             self.psvn_options.update({str(self.psvn_key):newpsvn})
             return self.get_psvn_shift() + newpsvn
 
-    student_score = Float(
-        default = 0,
+    best_student_score = Float(
+        default = 0.0,
         scope = Scope.user_state,
-        help = _("The student's score"),
+        help = _(
+            """
+            The student's (best) earned score on the problem - out of max_allowed_score.
+            It only records the scores from attempts which count: before the deadline and
+            passing the maximum number of allowed attempts.
+            """
+            ),
     )
 
     # ----------- Internal runtime fields -----------
@@ -609,6 +661,27 @@ class WeBWorKXBlock(
         scope = Scope.user_state,
         help = _("A runtime unique ID for this instance of this XBlock."),
     )
+
+    # ----------- Fields and code copied from capa_module.py -----------
+    # https://github.com/edx/edx-platform/blob/e66e43c5d2d452ec3a2c609fe26dbe7b4abba565/common/lib/xmodule/xmodule/capa_module.py
+    done = Boolean(
+        help=_("Whether the student has answered the problem and had a result saved"),
+        scope=Scope.user_state,
+        default=False
+    )
+
+    last_submission_time = Date(
+        help=_("Last submission time"),
+        scope=Scope.user_state
+    )
+
+    def set_last_submission_time(self):
+        """
+        Set the module's last submission time (when the problem was submitted)
+        """
+        self.last_submission_time = datetime.datetime.now(utc)
+    # ----------- End of fields and code copied from capa_module.py -----------
+
 
     def validate_field_data(self, validation, data):
         if not isinstance(data.custom_parameters, list):
@@ -635,9 +708,10 @@ class WeBWorKXBlock(
                 response_json['body_part100'] + response_json['body_part300'] + \
                 response_json['body_part500'] + response_json['body_part530'] + \
                 response_json['body_part550'] + response_json['body_part590'] + \
-                response_json['body_part710'] + response_json['body_part780_optional'] + \
-                response_json['body_part790'] + response_json['body_part999'][:-16] + \
-                response_json['head_part200']
+                response_json['body_part700'] + response_json['body_part999'][:-16]
+                # Left out
+                # + \
+                #response_json["head_part200"]
             # Attempt to fix relative URLs for static files
             fix_url = self.current_server_settings.get('server_static_files_url')
             if fix_url:
@@ -661,20 +735,36 @@ class WeBWorKXBlock(
         return response_json['body_part300']
 
     def _result_from_json_standalone(self,response_json):
-        # Need data from
-        #   answers
-        #   form_data
-        #   problem_result
-        #   problem_state
         # Maybe also:
+        #   problem_state
         #   flags
         #   debug
-        return "testing";
-# FIXME
-#        return '{ answers: '        + response_json['answers'] + \
-#               '  form_data: '      + response_json['form_data'] + \
-#               '  problem_result: ' + response_json['problem_result'] + \
-#               '  problem_state: '  + response_json['problem_state'] + ' }'
+        kept_answers = response_json.get('flags',{}).get('KEPT_EXTRA_ANSWERS')
+        answers_submitted = {key: value for key, value in response_json.get('form_data',{}).items() if key in kept_answers}
+        self.student_answer = answers_submitted
+        submission_settings = {key: value for key, value in response_json.get('form_data',{}).items() if key in STANDALONE_FORM_SETTINGS_TO_SAVE }
+        save_answer_results_data = dict()
+        raw_answer_results = response_json.get('answers',{})
+        current_submission_ww_raw_score = float(response_json.get('problem_result',{}).get('score',0.0))
+        for i in raw_answer_results.keys():
+            to_save = { key: value for key, value in raw_answer_results.get(i,{}).items() if key in ANSWER_FIELDS_TO_SAVE }
+            save_answer_results_data.update( { i : to_save } )
+        to_store = {
+            'provided_settings': {
+                'problemSeed': str(self.seed),
+                'psvn': str(self.get_psvn()),
+                'sourceFilePath': str(self.problem)
+            },
+            'submission_settings_processed': submission_settings,
+            'answers_processed': answers_submitted,
+            'problem_result': response_json.get('problem_result',{}),
+            'answer_results_data': save_answer_results_data,
+            'num_attempts': self.student_attempts,
+            'last_submission_time': str(self.last_submission_time),
+            'current_submission_ww_raw_score': current_submission_ww_raw_score,
+            'current_submission_scaled_score': current_submission_ww_raw_score * self.max_score()
+        }
+        return to_store
 
     @staticmethod
     def _sanitize_request_html2xml(request):
@@ -703,7 +793,6 @@ class WeBWorKXBlock(
         self.reload_main_setting()
         # and then
         self.set_current_server_settings()
-
         my_url = self.current_server_settings.get("server_api_url")
         my_auth_data = self.current_server_settings.get("auth_data",{})
         if my_url:
@@ -750,7 +839,7 @@ class WeBWorKXBlock(
             return None
             
 
-    # ----------- Grading -----------
+    # ----------- Grading related code -----------
     """
      The parent class ScorableXBlockMixin demands to define the methods
      has_submitted_answer(), get_score(), set_score(), calculate_score()
@@ -764,24 +853,35 @@ class WeBWorKXBlock(
     def get_score(self):
         """
         For scoring, get the score.
+        Return a raw score already persisted on the XBlock.
+        Should not perform new calculations.
         """
-        return self.CurrentScore
+        return Score(float(self.best_student_score), float(self.max_score()))
 
     def set_score(self, score):
         """
-        score type must be of of type Score
-        This method sets WeBWorKXBlock student_score and CurrentScore fields.
-        student_score is a webwork-problem database field to be saved.
-        CurrentScore is a ScorableXBlockMixin defined tuple.
-        this field is needed for the "must be implemented in a child class"
-        methods: calculate_score() and get_score()
+        Persist a score to the XBlock.
+        The score is a named tuple with a raw_earned attribute and a
+        raw_possible attribute, reflecting the raw earned score and the maximum
+        raw score the student could have earned respectively.
+        Arguments:
+            score: Score(raw_earned=float, raw_possible=float)
+        Returns:
+            None
+        This method also sets WeBWorKXBlock best_student_score field.
+        best_student_score is a webwork-problem database field to be saved.
         """
         assert type(score) == Score
-        self.student_score = float(score.raw_earned)
-        self.CurrentScore = score
+        self.best_student_score = float(score.raw_earned)
 
     def calculate_score(self):
-        return self.CurrentScore
+        """
+        Calculate a new raw score based on the state of the problem.
+        This method should not modify the state of the XBlock.
+        Returns:
+            Score(raw_earned=float, raw_possible=float)
+        """
+        return Score(float(self.best_student_score), float(self.max_score()))
 
     def get_max_score(self):
         """
@@ -865,6 +965,9 @@ class WeBWorKXBlock(
 
         if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
             disabled = True
+
+        # FIXME hide the show answers button when necessary
+        # FIXME - the standalone renderer should do this or JS code
 
         mysrcdoc = self._problem_from_json(self.request_webwork_standalone(STANDALONE_REQUEST_PARAMETERS)
            ).replace( "&", "&amp;"      # srcdoc needs "&" encoded
@@ -953,7 +1056,6 @@ class WeBWorKXBlock(
 
         try:
             # Copy the request
-            request = request_original.json.copy()
             self._sanitize_request_html2xml(request)
 
             # Handle check answer
@@ -965,7 +1067,8 @@ class WeBWorKXBlock(
                 if self.is_past_due():
                     raise WeBWorKXBlockError("Problem deadline has passed")
 
-                self.student_answer = request_original.json.copy()
+                #self.student_answer = request_original.copy() # This is far too to much
+                self.student_answer = request.copy() # This is really to much
                 self.student_attempts += 1
                 response['scored'] = True
 
@@ -990,33 +1093,35 @@ class WeBWorKXBlock(
             request.update(response_parameters)
 
             webwork_response = self.request_webwork_html2xml_split_json(request)
-            # This is the "answer" that is documented in the mysql DB tables.
-            # TODO: We need to build a better JSON object to store
-            response['data'] = self._result_from_json_html2xml_split_json(webwork_response)
 
-            if response['scored']:
-                score = Score(raw_earned = webwork_response['score'], raw_possible = self.get_max_score())
-                self.set_score(score)
-                response['score'] = self.CurrentScore.raw_earned
+            # This is the "answer" that is recorded in the mysql DB tables.
+            # TODO: We need to build a better JSON object to store for the html2xml option
+
+            response["data"] = self._result_from_json_html2xml_split_json(webwork_response)
+
+            # The next line can add something into "student_answer" which ends up in the submission saved data
+            #self.student_answer.update({"aa":"bb"})
+
+            if response["scored"]:
+                raw_ww_score = float(webwork_response["score"])
+                self.best_student_score = raw_ww_score * self.max_score()
+                response["score"] = float(self.best_student_score)
+
+                # Also send to the submissions API - if needed
+                # see discussion below. Does not seem necessary for webwork
+                #if sub_api:
+                #    sub_api.create_submission(self.student_item_key, response)
+
+                # Need to update the code here
+                self.save()
+                self.runtime.publish(self, 'grade', {
+                    'value': float(self.best_student_score),
+                    'max_value': self.max_score()
+                })
 
             response['success'] = True
             response['message'] = "Success!"
 
-            # Create a submission entry at courseware_studentmodule mysql57 table
-            if sub_api:
-                # Also send to the submissions API:
-                sub_api.create_submission(self.student_item_key, response)
-
-            self.runtime.publish(self, 'grade', {
-                'value': self.CurrentScore.raw_earned,
-                'max_value': self.CurrentScore.raw_possible,
-            })
-
-            self.runtime.publish(self, 'xblock.webwork.submitted', {
-                'num_attempts': self.student_attempts,
-                'submitted_answer': response['data'],
-                'grade': self.student_score,
-            })
 
         except WeBWorKXBlockError as e:
             response['message'] = e.message
@@ -1049,6 +1154,7 @@ class WeBWorKXBlock(
             self.student_answer = request_original.json.copy()
             request = request_original.json.copy()
             self._sanitize_request_standalone(request)
+
             self.set_problem_period()
             # TODO: Consider tranform into a match-case claus
             # after upgrading to python 3.10 and above
@@ -1069,8 +1175,11 @@ class WeBWorKXBlock(
                         # So send a request to webwork (with the student answer)
                         # and deliver it's response to the student + save it to edx submission database
                         self.student_attempts += 1
+			self.set_last_submission_time()
+			self.student_answer = request.copy() # This is really too much
                         webwork_response = self.request_webwork_standalone(request)
                         response['renderedHTML'] = self._problem_from_json(webwork_response)
+                        data_to_save = self._result_from_json_standalone(webwork_response)
                         response['scored'] = True
                         score = Score(
                             raw_earned = webwork_response['problem_result']['score'],
@@ -1078,7 +1187,7 @@ class WeBWorKXBlock(
                             )
                         self.set_score(score)
                         response['score'] = self.CurrentScore.raw_earned
-                        response['data'] = self._result_from_json_standalone(webwork_response)
+                        #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
                         response['success'] = True
                         response['message'] = "Successfull scored request treatment!"
                 #====Treat Show Correct Answers Button request====
@@ -1095,7 +1204,8 @@ class WeBWorKXBlock(
                     request.update(response_parameters)
                     webwork_response = self.request_webwork_standalone(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    data_to_save = self._result_from_json_standalone(webwork_response)
+                    #response['data'] = self._result_from_json_standalone(webwork_response)
                     response['success'] = True
                     response['message'] = "Successfull request treatment!"
                 else:
@@ -1130,7 +1240,8 @@ class WeBWorKXBlock(
                     request.update(response_parameters)
                     webwork_response = self.request_webwork_standalone(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    data_to_save = self._result_from_json_standalone(webwork_response)
+                    #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
                     response['success'] = True
                     response['message'] = "Successfull unscored request treatment!"
                 #====Treat Show Correct Answers Button request====
@@ -1139,7 +1250,8 @@ class WeBWorKXBlock(
                     request.update(response_parameters)
                     webwork_response = self.request_webwork_standalone(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    data_to_save = self._result_from_json_standalone(webwork_response)
+                    #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
                     response['success'] = True
                     response['message'] = "Successfull request treatment!"
                 #====Treat Preview My Answers Button request====
@@ -1148,7 +1260,8 @@ class WeBWorKXBlock(
                     request.update(response_parameters)
                     webwork_response = self.request_webwork_standalone(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    data_to_save = self._result_from_json_standalone(webwork_response)
+                    #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
                     response['success'] = True
                     response['message'] = "Successfull request treatment!"
                 else:
@@ -1161,7 +1274,8 @@ class WeBWorKXBlock(
                     request.update(response_parameters)
                     webwork_response = self.request_webwork_standalone(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    data_to_save = self._result_from_json_standalone(webwork_response)
+                    #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
                     response['success'] = True
                     if self.max_attempts > 0 and self.student_attempts > self.max_attempts:
                         response['message'] = (
@@ -1193,7 +1307,8 @@ class WeBWorKXBlock(
                         request.update(response_parameters)
                         webwork_response = self.request_webwork_standalone(request)
                         response['renderedHTML'] = self._problem_from_json(webwork_response)
-                        response['data'] = self._result_from_json_standalone(webwork_response)
+                        data_to_save = self._result_from_json_standalone(webwork_response)
+                        #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
                         response['success'] = True
                         response['message'] = "Successfull unscored request treatment!"
                     else:
@@ -1209,7 +1324,8 @@ class WeBWorKXBlock(
                     request.update(response_parameters)
                     webwork_response = self.request_webwork_standalone(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    data_to_save = self._result_from_json_standalone(webwork_response)
+                    #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
                     response['success'] = True
                     response['message'] = "Successfull request treatment!"
                 else:
@@ -1220,26 +1336,89 @@ class WeBWorKXBlock(
                     "Oops Problem period is undefined, thus request can't be treated!"
                     )
 
-            # This is the "answer" that is documented in the mysql DB tables.
-            # TODO: We need to build a better JSON object to store
-            # Create a submission entry at courseware_studentmodule mysql57 table
-# FIXME
-#            if sub_api:
-#                # Also send to the submissions API:
-#                sub_api.create_submission(self.student_item_key, response)
 
-# FIXME
-#            self.runtime.publish(self, 'grade', {
-#                'value': self.CurrentScore.raw_earned,
-#                'max_value': self.CurrentScore.raw_possible,
-#            })
+            # FIXME hide the show answers button
+            # FIXME - the standalone renderer should do this or JS code
 
-# FIXME
-#            self.runtime.publish(self, 'xblock.webwork.submitted', {
-#                'num_attempts': self.student_attempts,
-#                'submitted_answer': response['data'],
-#                'grade': self.student_score,
-#            })
+            # FIXME - we do NOT want all that data in the response. Comment out.
+            response["data"] = json.dumps( data_to_save )
+
+            current_submission_score = data_to_save.get('grade',0.0) # default to 0
+
+# FIXME - CODE BELOW NEEDS TO BE MOVED UP TO WHERE IT IS RELEVANT
+            if request["submit_type"] == "submitAnswers":
+                # This line and the fact that it is a field, gets it to be saved.
+                self.submission_data_to_save = self._result_from_json_standalone(webwork_response)
+
+                scaled_ww_score = self.submission_data_to_save.get('current_submission_scaled_score',0.0)
+                response["score"] = scaled_ww_score
+
+                # Records of all submissions will be created in edxapp_csmh.coursewarehistoryextended_studentmodulehistoryextended
+                # if the appropriate changes are made so the "webwork" xblock can save to their in addition to
+                # the default "problem" block.
+                # Records are also created/updated in edxapp.courseware_studentmodule but only the latest
+                # state is stored there.
+
+                # Issue with data in edxapp_csmh.coursewarehistoryextended_studentmodulehistoryextended
+                # 1. If self.save() called but self._publish_grade(myscore) is not called,
+                #    then one record is added, but it does not have the "new" grade set.
+                #    It uses whatever the prior grade was. That is essentially the same as what will
+                #    happen in neither is called, as a save() will be triggered when the method ends.
+                #    Calling self.save() after the self._publish_grade(myscore) would also behave that way.
+                # 2. If we skip self.save() and call self._publish_grade(myscore):
+                #    then 2 records are created. In the first (earlier) one - the "state" saved in the
+                #    table is the OLD data from before the current submission, but has the NEW score
+                #    so is NOT correct.
+                #    The second (later) record has the NEW data and the NEW score - so is correct.
+                #    This behavior seems very confusing - as it provides OLD submission data for the new time.
+                #    The second record is triggered when this method ends, which forces the updated data to
+                #    be saved to the database.
+                # 3. If we first call self.save() and then call self._publish_grade(myscore):
+                #    then 2 records are created. In the first (earlier) one - the "state" saved in the
+                #    table is the new data from the current submission, but has the OLD score
+                #    so is NOT correct.
+                #    The second (later) record has the NEW data and the NEW score - so is correct.
+                #    This behavior is still confusing but less so - as the first record does have the
+                #    correct "state" data, just not an updated grade value.
+
+                # This code should be done when the score should be saved (deadline/attempt limits)
+                # Use ScorableXBlockMixin required functions now:
+
+                if scaled_ww_score > self.best_student_score or not self.done:
+                    self.done = True
+                    self.best_student_score = scaled_ww_score
+                    myscore = self.calculate_score()
+                    self.set_score(myscore) # will set self.best_student_score again
+
+                    # We need to force a save so the call to "_publish_grade" has the current state data.
+                    self.save()
+
+                    # An XBlock which sets a score needs to publish it.
+                    # We only want scores to change if they are increasing (keep the largest score)
+                    # so we would have liked to use "only_if_higher=True" below
+                    self._publish_grade(myscore)
+                    # but using
+                    #    self._publish_grade(myscore, only_if_higher=True)
+                    # gave errors apparently when there was no saved grade.
+                    # So handle the decision on that in our code
+
+                # Submissions API was designed for ORA and more complex grading needs.
+                # When the sub_api is used mysql records are created in:
+                #     edxapp.submissions_score
+                #     edxapp.submissions_scoresummary
+                #     edxapp.submissions_submission
+                #     edxapp.submissions_studentitem
+                # It is NOT needed for the "Submission History" we are showing
+                # So it does not seem necessary for webwork.
+
+                #if sub_api:
+                #    submission = sub_api.create_submission(self.student_item_key, self.submission_data_to_save)
+                #    sub_api.set_score(submission["uuid"], myscore.raw_earned, myscore.raw_possible)
+
+                # Note: Records are created/updated in edxapp.courseware_studentmodule even without
+                #     sub_api.create_submission  AND without calls to self.runtime.publish()
+                # but that is just the store of the state of the XBlock "student" fields of Scope.user_state.
+                # It does not provide access to older data, so does not suffice.
 
         except WeBWorKXBlockError as e:
             response['message'] = "fixme" # e.message
