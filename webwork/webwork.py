@@ -49,14 +49,14 @@ HTML2XML_PARAMETERS = {
 
 # FIXME  - allow update of answersSubmitted according to user history
 HTML2XML_REQUEST_PARAMETERS = dict(HTML2XML_PARAMETERS, **{
-    "answersSubmitted": "0",
+    "answersSubmitted": "0"
 })
 
 # FIXME  - Increase by 1 from current answersSubmitted
 HTML2XML_RESPONSE_PARAMETERS_BASE = dict(HTML2XML_PARAMETERS, **{
     "psvn" : "54321",
     "showSummary" : "1",
-    "answersSubmitted": "1",
+    "answersSubmitted": "1"
 })
 
 HTML2XML_RESPONSE_PARAMETERS_CHECK = dict(HTML2XML_RESPONSE_PARAMETERS_BASE, **{
@@ -77,20 +77,19 @@ STANDALONE_PARAMETERS = {
     "format" : "json",
     "outputFormat": "simple",
     "showSummary": "1",
-    "permissionLevel": "0",
+    "permissionLevel": "0"
 }
 
 # FIXME  - allow update of answersSubmitted according to user history
 STANDALONE_REQUEST_PARAMETERS = dict(STANDALONE_PARAMETERS, **{
-    "answersSubmitted": "0",
-#    "timeOut": "5",
+    "answersSubmitted": "0"
 })
 
 # FIXME  - Increase by 1 from current answersSubmitted
 STANDALONE_RESPONSE_PARAMETERS_BASE = dict(STANDALONE_PARAMETERS, **{
     "psvn" : "54321",
     "showSummary" : "1",
-    "answersSubmitted": "1",
+    "answersSubmitted": "1"
 })
 
 STANDALONE_RESPONSE_PARAMETERS_CHECK = dict(STANDALONE_RESPONSE_PARAMETERS_BASE, **{
@@ -223,7 +222,7 @@ class SubmittingXBlockMixin:
             student_id=self.runtime.anonymous_student_id,
             course_id=six.text_type(location.course_key),
             item_id=six.text_type(location),
-            item_type=self.scope_ids.block_type,
+            item_type=self.scope_ids.block_type
         )
 
 @XBlock.needs("user")
@@ -354,7 +353,7 @@ class WeBWorKXBlock(
         'show_answers',
         'post_deadline_lockdown',
         'iframe_min_height', 'iframe_max_height', 'iframe_min_width',
-        'display_name',
+        'display_name', 'webwork_request_timeout',
         # Need in Studio but should be hidden from end-user
         'settings_are_dirty'
         )
@@ -525,7 +524,15 @@ class WeBWorKXBlock(
         scope=Scope.settings
     )
 
-
+    webwork_request_timeout = Float(
+        display_name=_("Timeout [in seconds] for Webwork Server Requests"),
+        help=_(
+            "Maximal number of seconds to wait for response from the webwork server. <br/>" +
+            "Don't change unless you are dealing with heavy duty problem."
+        ),
+        default=5.0,
+        scope=Scope.settings
+    )
     # ----------- Internal student fields -----------
     student_answer = Dict(
         default = None,
@@ -677,7 +684,7 @@ class WeBWorKXBlock(
             return my_res.json()
         return None
 
-    def request_webwork_standalone(self, params, timeout = None):
+    def request_webwork_standalone(self, params):
         # Standalone uses HTTP POST
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
         # probably need something like date = { params, 'courseID':str(self.ww_course), ... }
@@ -687,7 +694,7 @@ class WeBWorKXBlock(
 
         # Get updated main course settings from main course "Other course settings"
         # Do this now, as we may need updated main connection settings
-
+        my_timeout = max(self.webwork_request_timeout,0.5)
         self.reload_main_setting()
         # and then
         self.set_current_server_settings()
@@ -701,10 +708,10 @@ class WeBWorKXBlock(
                     psvn=str(self.psvn),
                     sourceFilePath=str(self.problem)
                 ),
-                timeout = timeout)
+                timeout = my_timeout)
             if my_res:
                 return my_res.json()
-            return None;
+            return None
             
 
     # ----------- Grading -----------
