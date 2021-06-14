@@ -18,6 +18,8 @@ from xblock.scorable import ScorableXBlockMixin, Score
 from xblock.completable import XBlockCompletionMode
 from cms.djangoapps.models.settings.course_grading import CourseGradingModel
 from enum import IntFlag, unique
+from xmodule.util.duedate import get_extended_due_date
+
 try:
     from submissions import api as sub_api
 except ImportError:
@@ -66,7 +68,7 @@ HTML2XML_RESPONSE_PARAMETERS_PREVIEW = dict(HTML2XML_RESPONSE_PARAMETERS_BASE, *
 })
 
 HTML2XML_RESPONSE_PARAMETERS_CORRECT = dict(HTML2XML_RESPONSE_PARAMETERS_BASE, **{
-    "WWcorrectAns": "Show correct answers"
+    "WWcorrectAns": "Show Correct Answers"
 })
 
 STANDALONE_PARAMETERS = {
@@ -81,6 +83,7 @@ STANDALONE_PARAMETERS = {
 # FIXME  - allow update of answersSubmitted according to user history
 STANDALONE_REQUEST_PARAMETERS = dict(STANDALONE_PARAMETERS, **{
     "answersSubmitted": "0",
+#    "timeOut": "5",
 })
 
 # FIXME  - Increase by 1 from current answersSubmitted
@@ -99,7 +102,7 @@ STANDALONE_RESPONSE_PARAMETERS_PREVIEW = dict(STANDALONE_RESPONSE_PARAMETERS_BAS
 })
 
 STANDALONE_RESPONSE_PARAMETERS_CORRECT = dict(STANDALONE_RESPONSE_PARAMETERS_BASE, **{
-    "WWcorrectAns": "Show correct answers"
+    "WWcorrectAns": "Show Correct Answers"
 })
 
 class WeBWorKXBlockError(RuntimeError):
@@ -107,11 +110,12 @@ class WeBWorKXBlockError(RuntimeError):
 
 @unique # decorator to enforce different integer values for each period
 class PPeriods(IntFlag):
-    UnKnown = 0
-    PreDue = 1 # The problem due date is in the future
-    PostDue = 2
-    Locked =  3 # Problem locked for submissions/watch answers etc'
-    UnLocked = 4
+    UnKnown = 0 
+    NoDue = 1 # some problem are due-dateless
+    PreDue = 2 # The problem due date is in the future
+    PostDue = 3
+    Locked =  4 # Problem locked for submissions/watch answers etc'
+    UnLocked = 5
     PostDueLocked = PostDue * Locked 
     PostDueUnLocked = PostDue * UnLocked
         
@@ -239,11 +243,7 @@ class WeBWorKXBlock(
         return self.runtime.modulestore.get_course(self.runtime.course_id)
 
     def set_due_date(self):
-        try:
-            from xmodule.util.duedate import get_extended_due_date
-            self.due = get_extended_due_date(self)
-        except ImportError:
-            self.due = None
+        self.due = get_extended_due_date(self)
 
 
     @property
@@ -260,7 +260,7 @@ class WeBWorKXBlock(
                 seconds = graceperiod['seconds']
                 )
         else:
-            self._grace_timedelta = datetime.timedelta( #FIXME
+            self._grace_timedelta = datetime.timedelta(
                 hours=0, minutes=0, seconds=0
                 )
 
@@ -281,6 +281,8 @@ class WeBWorKXBlock(
                 self.problem_period = PPeriods.PostDueLocked
             else:
                 self.problem_period = PPeriods.PostDueUnLocked
+        elif DueDate is None:
+            self.problem_period = PPeriods.NoDue
         
     def clear_problem_period(self):
         del self._problem_period
@@ -675,7 +677,7 @@ class WeBWorKXBlock(
             return my_res.json()
         return None
 
-    def request_webwork_standalone(self, params):
+    def request_webwork_standalone(self, params, timeout = None):
         # Standalone uses HTTP POST
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
         # probably need something like date = { params, 'courseID':str(self.ww_course), ... }
@@ -692,13 +694,14 @@ class WeBWorKXBlock(
 
         my_url = self.current_server_settings.get("server_api_url")
         if my_url:
-            my_res = requests.post(my_url, params=dict(
-                    params,
+            my_res = requests.post(my_url,
+                params=dict(params,
                     # standalone does not have course/user/password
                     problemSeed=str(self.seed),
                     psvn=str(self.psvn),
                     sourceFilePath=str(self.problem)
-                ))
+                ),
+                timeout = timeout)
             if my_res:
                 return my_res.json()
             return None;
@@ -828,7 +831,7 @@ class WeBWorKXBlock(
         mysrcdoc = self._problem_from_json(self.request_webwork_standalone(STANDALONE_REQUEST_PARAMETERS)
            ).replace( "&", "&amp;"      # srcdoc needs "&" encoded
            ).replace( "\"", "&quot;" )  # srcdoc needs double quotes encoded. Must do second.
-           #.replace( "\n", "" )
+           #.replace( "<br/>", "" )
 
         #test123 = self.course.other_course_settings.get('ww_standalone')
         #test123a = test123[ "test1" ]
@@ -923,7 +926,7 @@ class WeBWorKXBlock(
                 if self.is_past_due():
                     raise WeBWorKXBlockError("Problem deadline has passed")
 
-                self.student_answer = request.copy()
+                self.student_answer = request_original.json.copy()
                 self.student_attempts += 1
                 response['scored'] = True
 
@@ -1001,7 +1004,10 @@ class WeBWorKXBlock(
         }
 
         try:
-            # Copy the request
+            # make 2 copies of the student_answer.
+            # 1. For future reference and documentation and
+            # the other for the submission usage an
+            self.student_answer = request_original.json.copy()
             request = request_original.json.copy()
             self._sanitize_request_standalone(request)
             self.set_problem_period()
@@ -1009,6 +1015,7 @@ class WeBWorKXBlock(
             # after upgrading to python 3.10 and above
             #===========Treat Predue submissions =================
             if self.problem_period is PPeriods.PreDue:
+                #====Treat Submit Answers Button request====
                 if request['submit_type'] == "submitAnswers":
                     response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
                     request.update(response_parameters)
@@ -1022,13 +1029,12 @@ class WeBWorKXBlock(
                         # 3. period==PreDue + small enough student_attempts
                         # So send a request to webwork (with the student answer)
                         # and deliver it's response to the student + save it to edx submission database
-                        self.student_answer = request.copy()
                         self.student_attempts += 1
                         webwork_response = self.request_webwork_standalone(request)
                         response['renderedHTML'] = self._problem_from_json(webwork_response)
                         response['scored'] = True
                         score = Score(
-                            raw_earned = webwork_response['problem_result']['score'], 
+                            raw_earned = webwork_response['problem_result']['score'],
                             raw_possible = self.get_max_score()
                             )
                         self.set_score(score)
@@ -1036,14 +1042,15 @@ class WeBWorKXBlock(
                         response['data'] = self._result_from_json_standalone(webwork_response)
                         response['success'] = True
                         response['message'] = "Successfull scored request treatment!"
+                #====Treat Show Correct Answers Button request====
                 elif request['submit_type'] == "showCorrectAnswers":
                     response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
                     request.update(response_parameters)
-                    response['success'] = False
                     response['message'] = (
                         "Invalid request: Correct answers can be shown only after " +
                         self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
                     )
+                #====Treat Preview My Answers Button request====
                 elif request['submit_type'] ==  "previewAnswers":
                     response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
                     request.update(response_parameters)
@@ -1056,20 +1063,20 @@ class WeBWorKXBlock(
                     raise WeBWorKXBlockError("Unknown submit button used")
             #===========Treat PostDueLocked submissions ==========
             elif self.problem_period is PPeriods.PostDueLocked:
+                #====Treat Submit Answers Button request====
                 if request['submit_type'] == "submitAnswers":
-                    # Do nothing aside adequate failure message
                     response['message'] = (
                         "Sorry, can't submit: Submissions are locked up until " +
                         self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
                     )
+                #====Treat Show Correct Answers Button request====
                 elif request['submit_type'] == "showCorrectAnswers":
-                    # Do nothing aside adequate failure message
                     response['message'] = (
-                        "Sorry, show correct answers is locked up until " +
+                        "Sorry, Show Correct Answers is locked up until " +
                         self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
                     )
+                #====Treat Preview My Answers Button request====
                 elif request['submit_type'] ==  "previewAnswers":
-                    # Do nothing aside adequate failure message
                     response['message'] = (
                         "Sorry, previewing answers is locked up until" +
                         self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
@@ -1078,15 +1085,16 @@ class WeBWorKXBlock(
                     raise WeBWorKXBlockError("Unknown submit button used")
             #===========Treat PostDueUnLocked submissions ========
             elif self.problem_period is PPeriods.PostDueUnLocked:
+                #====Treat Submit Answers Button request====
                 if request['submit_type'] == "submitAnswers":
                     response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
                     request.update(response_parameters)
-                    self.student_answer = request.copy()
                     webwork_response = self.request_webwork_standalone(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
                     response['data'] = self._result_from_json_standalone(webwork_response)
                     response['success'] = True
                     response['message'] = "Successfull unscored request treatment!"
+                #====Treat Show Correct Answers Button request====
                 elif request['submit_type'] == "showCorrectAnswers":
                     response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
                     request.update(response_parameters)
@@ -1095,6 +1103,7 @@ class WeBWorKXBlock(
                     response['data'] = self._result_from_json_standalone(webwork_response)
                     response['success'] = True
                     response['message'] = "Successfull request treatment!"
+                #====Treat Preview My Answers Button request====
                 elif request['submit_type'] ==  "previewAnswers":
                     response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
                     request.update(response_parameters)
@@ -1105,7 +1114,68 @@ class WeBWorKXBlock(
                     response['message'] = "Successfull request treatment!"
                 else:
                     raise WeBWorKXBlockError("Unknown submit button used")
-            #===========Unknown problem period =================
+            #===========Treat problems without duedate============
+            elif self.problem_period is PPeriods.NoDue:
+                #====Treat Submit Answers Button request====
+                if request['submit_type'] == "submitAnswers":
+                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
+                    request.update(response_parameters)
+                    webwork_response = self.request_webwork_standalone(request)
+                    response['renderedHTML'] = self._problem_from_json(webwork_response)
+                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    response['success'] = True
+                    if self.max_attempts > 0 and self.student_attempts > self.max_attempts:
+                        response['message'] = (
+                            "Successfull but unscored request treatment! <br/>" +
+                            "Notice: <br/>" +
+                            "   You have reached your maximum " + str(self.max_attempts) + " scorable attempts. <br/>" +
+                            "   So no scores will be documented. <br/>" +
+                            "   Feel free to use the show-correct-answers button"
+                            )
+                    else:
+                        response['scored'] = True
+                        score = Score(
+                            raw_earned = webwork_response['problem_result']['score'],
+                            raw_possible = self.get_max_score()
+                            )
+                        self.set_score(score)
+                        response['score'] = self.CurrentScore.raw_earned
+                        response['message'] = (
+                            "Successfull scored request treatment! <br/>" +
+                            "This is your " + str(self.student_attempts) + " submission attempt" +
+                            " Out of the " + str(self.max_attempts) + " scorable submissions <br/>" +
+                            "Your score for this submission try is: " + str(self.CurrentScore.raw_earned)
+                            )
+                    self.student_attempts += 1
+                #====Treat Show Correct Answers Button request====
+                elif request['submit_type'] == "showCorrectAnswers":
+                    if self.max_attempts > 0 and self.student_attempts > self.max_attempts:
+                        response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
+                        request.update(response_parameters)
+                        webwork_response = self.request_webwork_standalone(request)
+                        response['renderedHTML'] = self._problem_from_json(webwork_response)
+                        response['data'] = self._result_from_json_standalone(webwork_response)
+                        response['success'] = True
+                        response['message'] = "Successfull unscored request treatment!"
+                    else:
+                        response['message'] = (
+                            "Invalid request: Correct answers can be shown only after" +
+                            " you will pass your maximum " + str(self.max_attempts) +
+                            " scorable submission attempts. <br/>" +
+                            "It is your " + str(self.student_attempts) + " submission attempt"
+                            )
+                #====Treat Preview My Answers Button request====
+                elif request['submit_type'] ==  "previewAnswers":
+                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
+                    request.update(response_parameters)
+                    webwork_response = self.request_webwork_standalone(request)
+                    response['renderedHTML'] = self._problem_from_json(webwork_response)
+                    response['data'] = self._result_from_json_standalone(webwork_response)
+                    response['success'] = True
+                    response['message'] = "Successfull request treatment!"
+                else:
+                    raise WeBWorKXBlockError("Unknown submit button used")
+            #===========Unknown period - raise error==============
             else:
                 raise WeBWorKXBlockError(
                     "Oops Problem period is undefined, thus request can't be treated!"
