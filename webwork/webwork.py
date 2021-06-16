@@ -149,7 +149,7 @@ class PPeriods(IntFlag):
     NoDue = 1 # some problem are due-dateless
     PreDue = 2 # The problem due date is in the future
     PostDue = 3
-    Locked =  4 # Problem locked for submissions/watch answers etc'
+    Locked =  4 # Problem locked for submissions/watch answers etc.
     UnLocked = 5
     PostDueLocked = PostDue * Locked 
     PostDueUnLocked = PostDue * UnLocked
@@ -301,6 +301,36 @@ class WeBWorKXBlock(
         
     def clear_problem_period(self):
         del self._problem_period
+
+    def period_button_settings( self ):
+        my_return_dict = {
+            'hideShowAnswers': False,
+            'hidePreview': False,
+            'hideSubmit': False
+        }
+        if self.problem_period is PPeriods.NoDue:
+            if self.max_attempts > 0 and self.student_attempts <= self.max_attempts:
+                my_return_dict.update( {
+                    'hideShowAnswers': True,
+                })
+        elif self.problem_period is PPeriods.PreDue:
+            if self.max_attempts > 0 and self.student_attempts > self.max_attempts:
+                my_return_dict.update( {
+                    'hideShowAnswers': True,
+                    'hidePreview': True,
+                    'hideSubmit': True
+                })
+            else:
+                my_return_dict.update( {
+                    'hideShowAnswers': True,
+                })
+        elif self.problem_period is PPeriods.PostDueLocked:
+            my_return_dict.update( {
+                'hideShowAnswers': True,
+                'hidePreview': True,
+                'hideSubmit': True
+            })
+        return( my_return_dict )
 
     show_in_read_only_mode = True # Allows staff to view the problem in read only mode when masquerading as a user.
     # See https://github.com/edx/edx-platform/blob/master/lms/djangoapps/courseware/masquerade.py
@@ -928,9 +958,6 @@ class WeBWorKXBlock(
         if not self.seed:
             self.seed = random.randint(1,2**31-1)
 
-        if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
-            disabled = True
-
         # FIXME hide the show answers button when necessary
         # FIXME - the standalone renderer should do this or JS code
 
@@ -985,12 +1012,18 @@ class WeBWorKXBlock(
         frag.add_css(self.resource_string("static/css/webwork.css"))
         frag.add_javascript( js1 )
 
-        frag.initialize_js('WeBWorKXBlockStandalone', {
+
+        self.set_problem_period() # Needed to get button settings
+
+        my_settings = self.period_button_settings()
+        my_settings.update({
           'unique_id' : self.unique_id,
           'rpID' : iframe_id,
           'messageDivID' : messageDiv_id,
           'resultDivID' : resultDiv_id
         })
+
+        frag.initialize_js('WeBWorKXBlockStandalone', my_settings)
 
         return frag
 
@@ -1010,22 +1043,31 @@ class WeBWorKXBlock(
         frag.add_css(self.resource_string("static/css/webwork.css"))
         return frag
 
-    def create_score_message(self, new_score):
+    def create_score_message(self, new_score, score_saved):
         """
         Message to show for score received now.
-        Should indicate whether saved or now.
         """
-        # FIXME
-        if ( new_score > self.best_student_score ):
-            return 'You score from this submission is ' + \
-                str(new_score) + ' from ' + str(self.get_max_score()) + \
-                ' points, which will replace your prior best score of ' + \
-                str(self.best_student_score) + ' points.'
+        attempts_message1 = "<br>So far you have made " + str(self.student_attempts) + " graded submissions to this problem."
+        attempts_message2 = "<br>You are allowed at most " + str(self.max_attempts) + " graded submissions to this problem."
+        if self.max_attempts == 0:
+            attempts_message2 = "<br>You are allowed an unlimited number of graded submissions to this problem."
+
+        if score_saved:
+            if new_score > self.best_student_score:
+                return 'You score from this submission is ' + \
+                    str(new_score) + ' from ' + str(self.get_max_score()) + \
+                    ' points, which will replace your prior best score of ' + \
+                    str(self.best_student_score) + ' points.' + attempts_message1 + attempts_message2
+            else:
+                return 'You score from this submission is ' + \
+                    str(new_score) + ' from ' + str(self.get_max_score()) + \
+                    ' points. Your prior best score was ' + \
+                    str(self.best_student_score) + ' points, and remains your current saved score.' + attempts_message1 + attempts_message2
         else:
-            return 'You score from this submission is ' + \
-                str(new_score) + ' from ' + str(self.get_max_score()) + \
-                ' points. Your prior best score was ' + \
-                str(self.best_student_score) + ' points, and remains your current saved score.'
+            return 'This is a submission which is not for credit.<br>You score from this submission is ' + \
+                    str(new_score) + ' from ' + str(self.get_max_score()) + \
+                    ' points.<br>Your recorded best score on this problem is ' + \
+                    str(self.best_student_score) + ' points.'
 
     # ----------- Handler for htm2lxml_no_iframe-----------
     @XBlock.handler
@@ -1043,6 +1085,7 @@ class WeBWorKXBlock(
 
         try:
             # Copy the request
+            request = request_original.json.copy()
             self._sanitize_request_html2xml(request)
 
             # Handle check answer
@@ -1127,8 +1170,8 @@ class WeBWorKXBlock(
         Handle the student's submission.
         """
         response = {
-            'success': False,
-            'message': "Unexpected error occurred!",
+            'success': False, # Set ONLY when the HTML in the iFrame should be replaced
+            'message': "An unexpected error occurred!",
             'data': '',
             'score': '',
             'scored': False
@@ -1143,275 +1186,244 @@ class WeBWorKXBlock(
             self._sanitize_request_standalone(request)
 
             self.set_problem_period()
-            # TODO: Consider tranform into a match-case claus
+            response.update( self.period_button_settings() );
+
+            # TODO: Consider tranform into a match-case clause
             # after upgrading to python 3.10 and above
-            #===========Treat Predue submissions =================
-            if self.problem_period is PPeriods.PreDue:
-                #====Treat Submit Answers Button request====
-                if request['submit_type'] == "submitAnswers":
-                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
-                    request.update(response_parameters)
+
+            # Handle first by submission type to reduce code duplication
+            #====Treat Submit Answers Button request====
+            if request['submit_type'] == "submitAnswers":
+                allow_submit = False
+                save_grade = False # Most cases do not save a grade / submission data
+                block_reason_message = None
+                message_when_allowed = None
+                # FIX
+                if self.problem_period is PPeriods.PostDueLocked:
+                    response['message'] = (
+                        "Sorry, you cannot submit answers now. Submissions are now permitted until " +
+                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S"))
+                elif self.problem_period is PPeriods.PostDueUnLocked:
+                    allow_submit = True
+                    save_grade = False    
+                elif self.problem_period is PPeriods.PreDue:
+                    # Check if the conditions for processing the submission are satisfied:
+                    # for the period==PreDue:
+                    #     self.max_attempts==0 or self.student_attempts <= self.max_attempts
+                    if self.max_attempts == 0:
+                        allow_submit = True
+                        save_grade = True
+                    if self.max_attempts > 0:
+                        if self.student_attempts > self.max_attempts:
+                            block_reason_message = ("Sorry, can't submit now since your made the maximum number of allowed submissions for credit." +
+                                                    "Additional use of the problem will be permitted after" +
+                                                    self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S") )
+                        else:
+                            allow_submit = True
+                            save_grade = True
+                elif self.problem_period is PPeriods.NoDue:
                     if self.max_attempts > 0 and self.student_attempts > self.max_attempts:
-                        # Do nothing aside adequate failure message
-                        response['message'] = "Sorry, can't submit since your maximum allowed attempts reached"
+                        allow_submit = True
+                        save_grade = False
+                        message_when_allowed = ( "You have exceeded the maximum number (" +
+                                                 str(self.max_attempts) +
+                                                 ")of graded attempts allowed on this problem.<br>" +
+                                                 "This and additional submissions are allowed, but your recorded grade will not be changed.<br>" +
+                                                 "You may now also use the Show Correct Answers button" )
                     else:
-                        # At last...Conditions for positive request treatment are met:
-                        # 1. self.max_attempts==0 or self.student_attempts <= self.max_attempts
-                        # 2. request==submitAnswers
-                        # 3. period==PreDue + small enough student_attempts
-                        # So send a request to webwork (with the student answer)
-                        # and deliver it's response to the student + save it to edx submission database
-                        self.student_attempts += 1
-			self.set_last_submission_time()
-			self.student_answer = request.copy() # This is really too much
-                        webwork_response = self.request_webwork_standalone(request)
-                        response['renderedHTML'] = self._problem_from_json(webwork_response)
-                        data_to_save = self._result_from_json_standalone(webwork_response)
-                        response['scored'] = True
-                        score = Score(
-                            raw_earned = webwork_response['problem_result']['score'],
-                            raw_possible = self.get_max_score()
-                            )
-                        self.set_score(score)
-                        response['score'] = self.CurrentScore.raw_earned
-                        #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
-                        response['success'] = True
-                        response['message'] = "Successfull scored request treatment!"
-                #====Treat Show Correct Answers Button request====
-                elif request['submit_type'] == "showCorrectAnswers":
-                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
-                    request.update(response_parameters)
-                    response['message'] = (
-                        "Invalid request: Correct answers can be shown only after " +
-                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
-                    )
-                #====Treat Preview My Answers Button request====
-                elif request['submit_type'] ==  "previewAnswers":
-                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
-                    request.update(response_parameters)
-                    webwork_response = self.request_webwork_standalone(request)
-                    response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    data_to_save = self._result_from_json_standalone(webwork_response)
-                    #response['data'] = self._result_from_json_standalone(webwork_response)
-                    response['success'] = True
-                    response['message'] = "Successfull request treatment!"
+                        allow_submit = True
+                        save_grade = True
                 else:
-                    raise WeBWorKXBlockError("Unknown submit button used")
-            #===========Treat PostDueLocked submissions ==========
-            elif self.problem_period is PPeriods.PostDueLocked:
-                #====Treat Submit Answers Button request====
-                if request['submit_type'] == "submitAnswers":
-                    response['message'] = (
-                        "Sorry, can't submit: Submissions are locked up until " +
-                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
-                    )
-                #====Treat Show Correct Answers Button request====
-                elif request['submit_type'] == "showCorrectAnswers":
-                    response['message'] = (
-                        "Sorry, Show Correct Answers is locked up until " +
-                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
-                    )
-                #====Treat Preview My Answers Button request====
-                elif request['submit_type'] ==  "previewAnswers":
-                    response['message'] = (
-                        "Sorry, previewing answers is locked up until" +
-                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
-                    )
-                else:
-                    raise WeBWorKXBlockError("Unknown submit button used")
-            #===========Treat PostDueUnLocked submissions ========
-            elif self.problem_period is PPeriods.PostDueUnLocked:
-                #====Treat Submit Answers Button request====
-                if request['submit_type'] == "submitAnswers":
-                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
-                    request.update(response_parameters)
-                    webwork_response = self.request_webwork_standalone(request)
-                    response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    data_to_save = self._result_from_json_standalone(webwork_response)
-                    #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
-                    response['success'] = True
-                    response['message'] = "Successfull unscored request treatment!"
-                #====Treat Show Correct Answers Button request====
-                elif request['submit_type'] == "showCorrectAnswers":
-                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
-                    request.update(response_parameters)
-                    webwork_response = self.request_webwork_standalone(request)
-                    response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    data_to_save = self._result_from_json_standalone(webwork_response)
-                    #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
-                    response['success'] = True
-                    response['message'] = "Successfull request treatment!"
-                #====Treat Preview My Answers Button request====
-                elif request['submit_type'] ==  "previewAnswers":
-                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
-                    request.update(response_parameters)
-                    webwork_response = self.request_webwork_standalone(request)
-                    response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    data_to_save = self._result_from_json_standalone(webwork_response)
-                    #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
-                    response['success'] = True
-                    response['message'] = "Successfull request treatment!"
-                else:
-                    raise WeBWorKXBlockError("Unknown submit button used")
-            #===========Treat problems without duedate============
-            elif self.problem_period is PPeriods.NoDue:
-                #====Treat Submit Answers Button request====
-                if request['submit_type'] == "submitAnswers":
-                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
-                    request.update(response_parameters)
-                    webwork_response = self.request_webwork_standalone(request)
-                    response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    data_to_save = self._result_from_json_standalone(webwork_response)
-                    #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
-                    response['success'] = True
-                    if self.max_attempts > 0 and self.student_attempts > self.max_attempts:
-                        response['message'] = (
-                            "Successfull but unscored request treatment! <br/>" +
-                            "Notice: <br/>" +
-                            "   You have reached your maximum " + str(self.max_attempts) + " scorable attempts. <br/>" +
-                            "   So no scores will be documented. <br/>" +
-                            "   Feel free to use the show-correct-answers button"
-                            )
-                    else:
-                        response['scored'] = True
-                        score = Score(
-                            raw_earned = webwork_response['problem_result']['score'],
-                            raw_possible = self.get_max_score()
-                            )
-                        self.set_score(score)
-                        response['score'] = self.CurrentScore.raw_earned
-                        response['message'] = (
-                            "Successfull scored request treatment! <br/>" +
-                            "This is your " + str(self.student_attempts) + " submission attempt" +
-                            " Out of the " + str(self.max_attempts) + " scorable submissions <br/>" +
-                            "Your score for this submission try is: " + str(self.CurrentScore.raw_earned)
-                            )
+                    # Bad value
+                    response['success'] = False
+                    response['message'] = "An error occurred"
+                    raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
+
+                if allow_submit:
                     self.student_attempts += 1
-                #====Treat Show Correct Answers Button request====
-                elif request['submit_type'] == "showCorrectAnswers":
-                    if self.max_attempts > 0 and self.student_attempts > self.max_attempts:
-                        response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
-                        request.update(response_parameters)
-                        webwork_response = self.request_webwork_standalone(request)
-                        response['renderedHTML'] = self._problem_from_json(webwork_response)
-                        data_to_save = self._result_from_json_standalone(webwork_response)
-                        #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
-                        response['success'] = True
-                        response['message'] = "Successfull unscored request treatment!"
+                    self.set_last_submission_time()
+                    self.student_answer = request.copy() # This is really too much
+
+                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
+                    request.update(response_parameters)
+                    webwork_response = self.request_webwork_standalone(request)
+                    response['renderedHTML'] = self._problem_from_json(webwork_response)
+
+                    if response['renderedHTML'] == 'Error':
+                        response['success'] = False
+                        response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
                     else:
-                        response['message'] = (
-                            "Invalid request: Correct answers can be shown only after" +
-                            " you will pass your maximum " + str(self.max_attempts) +
-                            " scorable submission attempts. <br/>" +
-                            "It is your " + str(self.student_attempts) + " submission attempt"
-                            )
-                #====Treat Preview My Answers Button request====
-                elif request['submit_type'] ==  "previewAnswers":
+                        response['success'] = True
+                        self.submission_data_to_save = self._result_from_json_standalone(webwork_response)
+                        scaled_ww_score = self.submission_data_to_save.get('current_submission_scaled_score',0.0)
+                        response['score'] = self.create_score_message(scaled_ww_score, save_grade)
+                        response['scored'] = True
+                        if message_when_allowed:
+                            response['message'] = message_when_allowed
+                        if save_grade:
+                            # Records of all submissions will be created in edxapp_csmh.coursewarehistoryextended_studentmodulehistoryextended
+                            # if the appropriate changes are made so the "webwork" xblock can save to their in addition to
+                            # the default "problem" block.
+                            # Records are also created/updated in edxapp.courseware_studentmodule but only the latest
+                            # state is stored there.
+
+                            # Issue with data in edxapp_csmh.coursewarehistoryextended_studentmodulehistoryextended
+                            # 1. If self.save() called but self._publish_grade(myscore) is not called,
+                            #    then one record is added, but it does not have the "new" grade set.
+                            #    It uses whatever the prior grade was. That is essentially the same as what will
+                            #    happen in neither is called, as a save() will be triggered when the method ends.
+                            #    Calling self.save() after the self._publish_grade(myscore) would also behave that way.
+                            # 2. If we skip self.save() and call self._publish_grade(myscore):
+                            #    then 2 records are created. In the first (earlier) one - the "state" saved in the
+                            #    table is the OLD data from before the current submission, but has the NEW score
+                            #    so is NOT correct.
+                            #    The second (later) record has the NEW data and the NEW score - so is correct.
+                            #    This behavior seems very confusing - as it provides OLD submission data for the new time.
+                            #    The second record is triggered when this method ends, which forces the updated data to
+                            #    be saved to the database.
+                            # 3. If we first call self.save() and then call self._publish_grade(myscore):
+                            #    then 2 records are created. In the first (earlier) one - the "state" saved in the
+                            #    table is the new data from the current submission, but has the OLD score
+                            #    so is NOT correct.
+                            #    The second (later) record has the NEW data and the NEW score - so is correct.
+                            #    This behavior is still confusing but less so - as the first record does have the
+                            #    correct "state" data, just not an updated grade value.
+
+                            # This code should be done when the score should be saved (deadline/attempt limits)
+                            # Use ScorableXBlockMixin required functions now:
+
+                            if scaled_ww_score > self.best_student_score or not self.done:
+                                self.done = True
+                                self.best_student_score = scaled_ww_score
+                                myscore = self.calculate_score()
+                                #self.set_score(myscore) # would just set self.best_student_score again
+
+                                # We need to force a save so the call to "_publish_grade" has the current state data.
+                                self.save()
+
+                                # An XBlock which sets a score needs to publish it.
+                                # We only want scores to change if they are increasing (keep the largest score)
+                                # so we would have liked to use "only_if_higher=True" below
+                                self._publish_grade(myscore)
+                                # but using
+                                #    self._publish_grade(myscore, only_if_higher=True)
+                                # gave errors apparently when there was no saved grade.
+                                # So handle the decision on that in our code
+
+                                # Submissions API was designed for ORA and more complex grading needs.
+                                # When the sub_api is used mysql records are created in:
+                                #     edxapp.submissions_score
+                                #     edxapp.submissions_scoresummary
+                                #     edxapp.submissions_submission
+                                #     edxapp.submissions_studentitem
+                                # It is NOT needed for the "Submission History" we are showing
+                                # So it does not seem necessary for webwork.
+
+                            #if sub_api:
+                            #    submission = sub_api.create_submission(self.student_item_key, self.submission_data_to_save)
+                            #    sub_api.set_score(submission["uuid"], myscore.raw_earned, myscore.raw_possible)
+
+                            # Note: Records are created/updated in edxapp.courseware_studentmodule even without
+                            #     sub_api.create_submission  AND without calls to self.runtime.publish()
+                            # but that is just the store of the state of the XBlock "student" fields of Scope.user_state.
+                            # It does not provide access to older data, so does not suffice.
+                else:
+                    # Give message
+                    response['success'] = False
+                    if block_reason_message:
+                        response['message'] = block_reason_message
+            elif request['submit_type'] == "previewAnswers":
+                # FIX
+                if self.problem_period is PPeriods.PostDueLocked:
+                    response['message'] = (
+                        "Sorry, you cannot preview answers now. Use of this problem is not permitted until " +
+                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
+                    )
+                elif self.problem_period is PPeriods.NoDue or self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueUnLocked:
                     response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
                     request.update(response_parameters)
                     webwork_response = self.request_webwork_standalone(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
-                    data_to_save = self._result_from_json_standalone(webwork_response)
-                    #TO-DELETE#response['data'] = self._result_from_json_standalone(webwork_response)
-                    response['success'] = True
-                    response['message'] = "Successfull request treatment!"
+                    # On preview we do not need to save result of the call, so we do not want to make any change to the XBlock state.
+                    if response['renderedHTML'] == 'Error':
+                        response['success'] = False
+                        response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
+                    else:
+                        response['success'] = True
+                        response['message'] = "Correct answers should be provided in the table above the question."
                 else:
-                    raise WeBWorKXBlockError("Unknown submit button used")
-            #===========Unknown period - raise error==============
-            else:
-                raise WeBWorKXBlockError(
-                    "Oops Problem period is undefined, thus request can't be treated!"
+                    # Bad value
+                    response['success'] = False
+                    response['message'] = "An error occurred"
+                    raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
+            elif request['submit_type'] == "showCorrectAnswers":
+                # FIX
+                if self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueLocked:
+                    response['message'] = (
+                        "Sorry, you cannot request to see the correct answers now. Answers will become available at " +
+                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
                     )
-
-
-            # FIXME hide the show answers button
-            # FIXME - the standalone renderer should do this or JS code
-
-            # FIXME - we do NOT want all that data in the response. Comment out.
-            response["data"] = json.dumps( data_to_save )
-
-            current_submission_score = data_to_save.get('grade',0.0) # default to 0
-
-# FIXME - CODE BELOW NEEDS TO BE MOVED UP TO WHERE IT IS RELEVANT
-            if request["submit_type"] == "submitAnswers":
-                # This line and the fact that it is a field, gets it to be saved.
-                self.submission_data_to_save = self._result_from_json_standalone(webwork_response)
-
-                scaled_ww_score = self.submission_data_to_save.get('current_submission_scaled_score',0.0)
-                response['score'] = self.create_score_message(scaled_ww_score)
-
-                # Records of all submissions will be created in edxapp_csmh.coursewarehistoryextended_studentmodulehistoryextended
-                # if the appropriate changes are made so the "webwork" xblock can save to their in addition to
-                # the default "problem" block.
-                # Records are also created/updated in edxapp.courseware_studentmodule but only the latest
-                # state is stored there.
-
-                # Issue with data in edxapp_csmh.coursewarehistoryextended_studentmodulehistoryextended
-                # 1. If self.save() called but self._publish_grade(myscore) is not called,
-                #    then one record is added, but it does not have the "new" grade set.
-                #    It uses whatever the prior grade was. That is essentially the same as what will
-                #    happen in neither is called, as a save() will be triggered when the method ends.
-                #    Calling self.save() after the self._publish_grade(myscore) would also behave that way.
-                # 2. If we skip self.save() and call self._publish_grade(myscore):
-                #    then 2 records are created. In the first (earlier) one - the "state" saved in the
-                #    table is the OLD data from before the current submission, but has the NEW score
-                #    so is NOT correct.
-                #    The second (later) record has the NEW data and the NEW score - so is correct.
-                #    This behavior seems very confusing - as it provides OLD submission data for the new time.
-                #    The second record is triggered when this method ends, which forces the updated data to
-                #    be saved to the database.
-                # 3. If we first call self.save() and then call self._publish_grade(myscore):
-                #    then 2 records are created. In the first (earlier) one - the "state" saved in the
-                #    table is the new data from the current submission, but has the OLD score
-                #    so is NOT correct.
-                #    The second (later) record has the NEW data and the NEW score - so is correct.
-                #    This behavior is still confusing but less so - as the first record does have the
-                #    correct "state" data, just not an updated grade value.
-
-                # This code should be done when the score should be saved (deadline/attempt limits)
-                # Use ScorableXBlockMixin required functions now:
-
-                if scaled_ww_score > self.best_student_score or not self.done:
-                    self.done = True
-                    self.best_student_score = scaled_ww_score
-                    myscore = self.calculate_score()
-                    self.set_score(myscore) # will set self.best_student_score again
-
-                    # We need to force a save so the call to "_publish_grade" has the current state data.
-                    self.save()
-
-                    # An XBlock which sets a score needs to publish it.
-                    # We only want scores to change if they are increasing (keep the largest score)
-                    # so we would have liked to use "only_if_higher=True" below
-                    self._publish_grade(myscore)
-                    # but using
-                    #    self._publish_grade(myscore, only_if_higher=True)
-                    # gave errors apparently when there was no saved grade.
-                    # So handle the decision on that in our code
-
-                # Submissions API was designed for ORA and more complex grading needs.
-                # When the sub_api is used mysql records are created in:
-                #     edxapp.submissions_score
-                #     edxapp.submissions_scoresummary
-                #     edxapp.submissions_submission
-                #     edxapp.submissions_studentitem
-                # It is NOT needed for the "Submission History" we are showing
-                # So it does not seem necessary for webwork.
-
-                #if sub_api:
-                #    submission = sub_api.create_submission(self.student_item_key, self.submission_data_to_save)
-                #    sub_api.set_score(submission["uuid"], myscore.raw_earned, myscore.raw_possible)
-
-                # Note: Records are created/updated in edxapp.courseware_studentmodule even without
-                #     sub_api.create_submission  AND without calls to self.runtime.publish()
-                # but that is just the store of the state of the XBlock "student" fields of Scope.user_state.
-                # It does not provide access to older data, so does not suffice.
+                elif self.problem_period is PPeriods.PostDueUnLocked or self.problem_period is PPeriods.NoDue:
+                    # Conditionally allowed. NoDue requires an additional condition to be tested
+                    allow_show_correct = False;
+                    if self.problem_period is PPeriods.PostDueUnLocked:
+                        allow_show_correct = True
+                    if self.problem_period is PPeriods.NoDue:
+                        if self.max_attempts == 0:
+                            required_to_show = 10; # in this case - we allow after required_to_show attempts - FIXME - make this configurable
+                            end_of_message = ""
+                        if self.max_attempts > 0:
+                            required_to_show = self.max_attempts
+                            end_of_message = ( "<br>Otherwise the answers will become available at " +
+                                self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S") )
+                        if self.student_attempts > required_to_show:
+                            allow_show_correct = True
+                        else:
+                            response['message'] = (
+                                "Correct answers for this problem will become available after you submit at least " +
+                                str(required_to_show) + " answers.<br>" +
+                                "You have already submitted " + str(self.student_attempts) + " answers to be graded." +
+                                end_of_message
+                            )
+                else:
+                    # Bad value
+                    response['success'] = False
+                    response['message'] = "An error occurred"
+                    raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
+                if allow_show_correct:
+                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
+                    request.update(response_parameters)
+                    webwork_response = self.request_webwork_standalone(request)
+                    # On show correct we do not need to save result of the call, so we do not want data in self.submission_data_to_save
+                    # Use self.submission_data_to_save to show that a "show correct answers" action was taken
+                    self.set_last_submission_time()
+                    self.submission_data_to_save.clear()
+                    self.submission_data_to_save.update({
+                        "action" : "show correct answers",
+                        'last_submission_time': str(self.last_submission_time)
+                    })
+                    response['renderedHTML'] = self._problem_from_json(webwork_response)
+                    if response['renderedHTML'] == 'Error':
+                        response['success'] = False
+                        response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
+                        self.submission_data_to_save.update({"action_failed" : "error occurred"})
+                    else:
+                        # FIXME - mark a flag that show correct was used.
+                        response['success'] = True
+                        response['message'] = "Correct answers should be provided in the table above the question."
+                        self.submission_data_to_save.update({"action_success" : "answers being displayed to the student"})
+            else:
+                response['success'] = False
+                response['message'] = "An error occurred - invalid submission type"
+                raise WeBWorKXBlockError("Unknown submit button used")
 
         except WeBWorKXBlockError as e:
             response['message'] = "fixme" # e.message
 
+        # FIXME - we do NOT want all that data in the response. Comment out.
+        #response["data"] = json.dumps( data_to_save )
+
         return Response(
-                # FIXME - this is from the html2xml code
                 text = json.dumps(response),
                 content_type =  "application/json",
                 status = 200,
