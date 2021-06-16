@@ -173,7 +173,8 @@ class WWProblemPeriod:
     def period(self):
         self._period = PPeriods.UnKnown
 
-# FIXME - this should be kept in a different file, clearing keeping the code from that
+# The code below is NOT being used. If it is needed - it should be in a different file.
+# FIXME - this should be kept in a different file, clearly keeping the code from that
 # project separate from that of this project.
 class StudentViewUserStateMixin:
     """
@@ -236,29 +237,6 @@ class StudentViewUserStateMixin:
         return webob.response.Response(
             body=json_result.encode('utf-8'),
             content_type='application/json'
-        )
-
-class SubmittingXBlockMixin:
-    """
-    This class has been copy-pasted from the problem-builder xblock
-    It Simplifies the use of edX "submissions API"
-    within the Webwork XBlock
-    """
-    completion_mode = XBlockCompletionMode.COMPLETABLE
-    has_score = True
-
-    @property
-    def student_item_key(self):
-        """
-        Get the student_item_dict required for the submissions API.
-        """
-        assert sub_api is not None
-        location = self.location.replace(branch=None, version=None)  # Standardize the key in case it isn't already
-        return dict(
-            student_id=self.runtime.anonymous_student_id,
-            course_id=six.text_type(location.course_key),
-            item_id=six.text_type(location),
-            item_type=self.scope_ids.block_type
         )
 
 @XBlock.needs("user")
@@ -360,7 +338,7 @@ class WeBWorKXBlock(
             self.current_server_settings.update({  # Need str() on the first 2 to force into a final string form, and not __proxy__
                 "server_type":             str(self.ww_server_type),
                 "server_api_url":          str(self.ww_server_api_url),
-                "auth_data":               self.auth_data, # But not here - as it is a Dict
+                "auth_data":               self.auth_data, # But no str() here - as it is a Dict
             })
             if self.ww_server_type == "html2ml":
                 self.current_server_settings.update({
@@ -395,15 +373,13 @@ class WeBWorKXBlock(
         # For manual server setting
         'ww_server_type', 'ww_server_api_url', 'ww_server_static_files_url', 'auth_data',
         # Main problem settings
-        'problem', 'max_allowed_score', 'max_attempts', 'psvn_key',
-        # For html2xml only:
-        'ww_course', 'ww_username', 'ww_password',
+        'problem', 'max_allowed_score', 'max_attempts', 'weight', 'psvn_key',
         # Less important settings
+        'display_name',
         'show_answers',
-        'post_deadline_lockdown',
-        'iframe_min_height', 'iframe_max_height', 'iframe_min_width',
         'display_name', 'webwork_request_timeout',
-        'display_name'
+        'post_deadline_lockdown', # FIXME - probably being replaced
+        'iframe_min_height', 'iframe_max_height', 'iframe_min_width'
         )
 
     settings_type = Integer(
@@ -463,28 +439,6 @@ class WeBWorKXBlock(
        help=_("This is the authentication data needed to interface with the server. Required fields depend on the servert type."),
     )
 
-    # Moved into external settings - "Other course settings" data structure
-    ww_course = String(
-       display_name = _("WeBWorK course"),
-       default = _("daemon_course"),
-       scope = Scope.settings,
-       help=_("This is the course name to use when interfacing with the html2xml interface on a regular webwork server."),
-    )
-
-    ww_username = String(
-       display_name = _("WeBWorK username"),
-       default = _("daemon"),
-       scope = Scope.settings,
-       help=_("This is the username to use when interfacing with the html2xml interface on a regular webwork server."),
-    )
-
-    ww_password = String(
-       display_name = _("WeBWorK password"),
-       default = _("wievith3Xos0osh"),
-       scope = Scope.settings,
-       help=_("This is the password to use when interfacing with the html2xml interface on a regular webwork server."),
-    )
-
     display_name = String(
        display_name = _("Display Name"),
        default = _("WeBWorK Problem"),
@@ -519,6 +473,7 @@ class WeBWorKXBlock(
         help = _("Max number of allowed submissions (0 = unlimited)"),
     )
 
+    # FIXME - probably being replaced
     post_deadline_lockdown = Integer(
         display_name = _("Post deadline lockdown period (in hours) when submission is not permitted"),
         default = 24,
@@ -653,6 +608,17 @@ class WeBWorKXBlock(
             ),
     )
 
+    # Required by https://openedx.atlassian.net/wiki/spaces/AC/pages/161400730/Open+edX+Runtime+XBlock+API
+    # Somewhat based on sample from
+    # https://github.com/edx/edx-platform/blob/e66e43c5d2d452ec3a2c609fe26dbe7b4abba565/common/lib/xmodule/xmodule/capa_module.py
+    weight = Float(
+        display_name=_("Problem Weight"),
+        help=_("Defines the number of points the problem is worth."),
+        values={"min": 0.0, "step": 0.1},
+        default = 1.0,
+        scope=Scope.settings
+    )
+
     # ----------- Internal runtime fields -----------
 
     unique_id = String(
@@ -669,6 +635,7 @@ class WeBWorKXBlock(
         scope=Scope.user_state,
         default=False
     )
+
 
     last_submission_time = Date(
         help=_("Last submission time"),
@@ -762,7 +729,7 @@ class WeBWorKXBlock(
             'num_attempts': self.student_attempts,
             'last_submission_time': str(self.last_submission_time),
             'current_submission_ww_raw_score': current_submission_ww_raw_score,
-            'current_submission_scaled_score': current_submission_ww_raw_score * self.max_score()
+            'current_submission_scaled_score': current_submission_ww_raw_score * self.get_max_score()
         }
         return to_store
 
@@ -812,8 +779,6 @@ class WeBWorKXBlock(
     def request_webwork_standalone(self, params):
         # Standalone uses HTTP POST
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
-        # probably need something like date = { params, 'courseID':str(self.ww_course), ... }
-        # remember the URL needs to have :3000/render-api
         # and outputFormat set to "simple" and format set to "json".
         # Check by examining form parameters from Rederly UI on "render" call.
 
@@ -856,7 +821,7 @@ class WeBWorKXBlock(
         Return a raw score already persisted on the XBlock.
         Should not perform new calculations.
         """
-        return Score(float(self.best_student_score), float(self.max_score()))
+        return Score(float(self.best_student_score), float(self.get_max_score()))
 
     def set_score(self, score):
         """
@@ -881,7 +846,7 @@ class WeBWorKXBlock(
         Returns:
             Score(raw_earned=float, raw_possible=float)
         """
-        return Score(float(self.best_student_score), float(self.max_score()))
+        return Score(float(self.best_student_score), float(self.get_max_score()))
 
     def get_max_score(self):
         """
@@ -1007,6 +972,10 @@ class WeBWorKXBlock(
         # FIXME - the standalone renderer should do this
 
         html = self.resource_string("static/html/webwork_standalone.html")
+
+        messageDiv_id = 'edx_message-' + self.unique_id;
+        resultDiv_id  = 'edx_webwork_result-' + self.unique_id;
+
         js1  = self.resource_string("static/js/src/webwork_standalone.js")
 
         frag = Fragment(html.format(self=self,srcdoc=mysrcdoc,unique_id=self.unique_id,iFrameInit=iframe_resize_init,test123a=test123a))
@@ -1018,7 +987,9 @@ class WeBWorKXBlock(
 
         frag.initialize_js('WeBWorKXBlockStandalone', {
           'unique_id' : self.unique_id,
-          'rpID' : iframe_id
+          'rpID' : iframe_id,
+          'messageDivID' : messageDiv_id,
+          'resultDivID' : resultDiv_id
         })
 
         return frag
@@ -1039,6 +1010,22 @@ class WeBWorKXBlock(
         frag.add_css(self.resource_string("static/css/webwork.css"))
         return frag
 
+    def create_score_message(self, new_score):
+        """
+        Message to show for score received now.
+        Should indicate whether saved or now.
+        """
+        # FIXME
+        if ( new_score > self.best_student_score ):
+            return 'You score from this submission is ' + \
+                str(new_score) + ' from ' + str(self.get_max_score()) + \
+                ' points, which will replace your prior best score of ' + \
+                str(self.best_student_score) + ' points.'
+        else:
+            return 'You score from this submission is ' + \
+                str(new_score) + ' from ' + str(self.get_max_score()) + \
+                ' points. Your prior best score was ' + \
+                str(self.best_student_score) + ' points, and remains your current saved score.'
 
     # ----------- Handler for htm2lxml_no_iframe-----------
     @XBlock.handler
@@ -1104,7 +1091,7 @@ class WeBWorKXBlock(
 
             if response["scored"]:
                 raw_ww_score = float(webwork_response["score"])
-                self.best_student_score = raw_ww_score * self.max_score()
+                self.best_student_score = raw_ww_score * self.get_max_score()
                 response["score"] = float(self.best_student_score)
 
                 # Also send to the submissions API - if needed
@@ -1116,7 +1103,7 @@ class WeBWorKXBlock(
                 self.save()
                 self.runtime.publish(self, 'grade', {
                     'value': float(self.best_student_score),
-                    'max_value': self.max_score()
+                    'max_value': self.get_max_score()
                 })
 
             response['success'] = True
@@ -1351,7 +1338,7 @@ class WeBWorKXBlock(
                 self.submission_data_to_save = self._result_from_json_standalone(webwork_response)
 
                 scaled_ww_score = self.submission_data_to_save.get('current_submission_scaled_score',0.0)
-                response["score"] = scaled_ww_score
+                response['score'] = self.create_score_message(scaled_ww_score)
 
                 # Records of all submissions will be created in edxapp_csmh.coursewarehistoryextended_studentmodulehistoryextended
                 # if the appropriate changes are made so the "webwork" xblock can save to their in addition to
