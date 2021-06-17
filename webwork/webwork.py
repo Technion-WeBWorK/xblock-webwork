@@ -954,37 +954,35 @@ class WeBWorKXBlock(
         The primary view of the XBlock, shown to students
         when viewing courses. For standalone renderer use
         """
-        #problem = self.store.get_item(self.problem.location)
         if not self.seed:
             self.seed = random.randint(1,2**31-1)
 
         # FIXME hide the show answers button when necessary
         # FIXME - the standalone renderer should do this or JS code
 
-        mysrcdoc = self._problem_from_json(self.request_webwork_standalone(STANDALONE_REQUEST_PARAMETERS)
-           ).replace( "&", "&amp;"      # srcdoc needs "&" encoded
-           ).replace( "\"", "&quot;" )  # srcdoc needs double quotes encoded. Must do second.
-           #.replace( "<br/>", "" )
+        html_settings = 'lang=\"{}\" dir=\"{}\"'.format("en","ltr")
+        loading1 = "Your problem should load soon."
+        loading2 = "Please wait."
+        loadingHtml = "<html {html_settings}><body>{loading1}<br>{loading1}</body></html>"
+        mysrcdoc = loadingHtml.format(html_settings = html_settings,
+            loading1 = loading1, loading2 = loading2 )
+#        self._problem_from_json(self.request_webwork_standalone(STANDALONE_REQUEST_PARAMETERS)
+#           ).replace( "&", "&amp;"      # srcdoc needs "&" encoded
+#           ).replace( "\"", "&quot;" )  # srcdoc needs double quotes encoded. Must do second.
+#           #.replace( "<br/>", "" )
 
-        test123 = self.current_server_settings
-        test123.update( {"psvn_options_": self.psvn_options })
-        test123.update({"psvn":self.get_psvn()})
-        test123.update({"unique_id":str(self.unique_id)})
-        my_st = "error reading server type  from self.current_server_settings"
+        debug_data1 = self.current_server_settings.copy()
+        debug_data1.update({
+            "psvn_options_": self.psvn_options,
+            "psvn":self.get_psvn(),
+            "unique_id":str(self.unique_id),
+        })
         try:
-            test123a = json.dumps(test123,skipkeys=True)
+            debug_data = json.dumps(debug_data1,skipkeys=True)
         except TypeError:
-            test123a = "could not provide self.current_server_settings"
-        try:
-            my_st = self.current_server_settings.get("server_type","")
-        except:
-            my_st = "hit here"
-        tmp1 = "temp value"
-        if  my_st == 'standalone':
-            tmp1 = "reports == standalone"
-        else:
-            tmp1 = "reports != standalone"
-        test123a = test123a + "   " + my_st + tmp1
+            debug_data = "error"
+
+        # FIXME Make option to disable debug_data
 
         iframe_id = 'rendered-problem-' + self.unique_id;
         iframe_resize_init = \
@@ -995,9 +993,6 @@ class WeBWorKXBlock(
            ', minWidth: '  + str(self.iframe_min_width)  + \
            '}, "#' + iframe_id + '")\n //]]></script>'
 
-        # FIXME hide the show answers button
-        # FIXME - the standalone renderer should do this
-
         html = self.resource_string("static/html/webwork_standalone.html")
 
         messageDiv_id = 'edx_message-' + self.unique_id;
@@ -1005,23 +1000,29 @@ class WeBWorKXBlock(
 
         js1  = self.resource_string("static/js/src/webwork_standalone.js")
 
-        frag = Fragment(html.format(self=self,srcdoc=mysrcdoc,unique_id=self.unique_id,iFrameInit=iframe_resize_init,test123a=test123a))
+        frag = Fragment( html.format(
+            self = self,
+            srcdoc = mysrcdoc,
+            unique_id = self.unique_id,
+            iFrameInit = iframe_resize_init,
+            debug_data = debug_data
+        ))
 
         frag.add_javascript_url('https://cdnjs.cloudflare.com/ajax/libs/iframe-resizer/4.2.9/iframeResizer.js')
 
         frag.add_css(self.resource_string("static/css/webwork.css"))
         frag.add_javascript( js1 )
 
-
-        self.set_problem_period() # Needed to get button settings
-
-        my_settings = self.period_button_settings()
-        my_settings.update({
+#        self.set_problem_period() # Needed to get button settings
+#        my_settings = self.period_button_settings()
+#        my_settings.update({
+        my_settings = {
           'unique_id' : self.unique_id,
           'rpID' : iframe_id,
           'messageDivID' : messageDiv_id,
           'resultDivID' : resultDiv_id
-        })
+        }
+#        )
 
         frag.initialize_js('WeBWorKXBlockStandalone', my_settings)
 
@@ -1193,7 +1194,20 @@ class WeBWorKXBlock(
 
             # Handle first by submission type to reduce code duplication
             #====Treat Submit Answers Button request====
-            if request['submit_type'] == "submitAnswers":
+            if request['submit_type'] == "initialLoad":
+                request.pop('submit_type')
+                response_parameters = STANDALONE_REQUEST_PARAMETERS
+                request.update(response_parameters)
+                webwork_response = self.request_webwork_standalone(request)
+                response['renderedHTML'] = self._problem_from_json(webwork_response)
+                if response['renderedHTML'] == 'Error':
+                    response['success'] = False
+                    response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
+                else:
+                    response['success'] = True
+                    response.pop('message')
+                    # FIXME - add attempts message
+            elif request['submit_type'] == "submitAnswers":
                 allow_submit = False
                 save_grade = False # Most cases do not save a grade / submission data
                 block_reason_message = None
