@@ -49,6 +49,9 @@ function WeBWorKXBlockStandalone(runtime, element, initdata) {
         if (result.hideSubmit) {
             hideSubmit = result.hideSubmit
         }
+        // Does it help to add these here?
+        insertListener();
+        hideButtons();
     }
     function hideButtons(result) {
         let problemForm = problemiframe.contentWindow.document.getElementById('problemMainForm')  // don't croak when the empty iframe is first loaded
@@ -57,23 +60,42 @@ function WeBWorKXBlockStandalone(runtime, element, initdata) {
             return;
         }
         if (hideShowAnswers) {
-            var my_buttons = problemiframe.contentWindow.document.getElementsByName("showCorrectAnswers")
+            console.log('hideButtons: disabling show answers');
+            var my_buttons = problemiframe.contentWindow.document.getElementsByName("showCorrectAnswers") // name in standalone
             // my_button.style.visibility = "hidden"
             my_buttons.forEach( button => { button.disabled = true; })
-            console.log('hideButtons: disabling show answers');
+            my_buttons = problemiframe.contentWindow.document.getElementsByName("WWcorrectAns") // name in html2xml
+            // my_button.style.visibility = "hidden"
+            my_buttons.forEach( button => { button.disabled = true; })
         }
         if (hidePreview) {
-            var my_buttons = problemiframe.contentWindow.document.getElementsByName("previewAnswers")
+            console.log('hideButtons: disabling preview');
+            var my_buttons = problemiframe.contentWindow.document.getElementsByName("previewAnswers") // name in standalone
             // my_button.style.visibility = "hidden"
             my_buttons.forEach( button => { button.disabled = true; })
-            console.log('hideButtons: disabling preview');
+            my_buttons = problemiframe.contentWindow.document.getElementsByName("preview") // name in html2xml
+            // my_button.style.visibility = "hidden"
+            my_buttons.forEach( button => { button.disabled = true; })
         }
         if (hideSubmit) {
-            var my_buttons = problemiframe.contentWindow.document.getElementsByName("submitAnswers")
+            console.log('hideButtons: disabling submit');
+            var my_buttons = problemiframe.contentWindow.document.getElementsByName("submitAnswers") // name in standalone
             // my_button.style.visibility = "hidden"
             my_buttons.forEach( button => { button.disabled = true; })
-            console.log('hideButtons: disabling submit');
+            my_buttons = problemiframe.contentWindow.document.getElementsByName("WWsubmit") // name in html2xml
+            // my_button.style.visibility = "hidden"
+            my_buttons.forEach( button => { button.disabled = true; })
         }
+        // hack for testing
+//        if (true) {
+//            console.log('hideButtons: disabling show answers');
+//            var my_buttons = problemiframe.contentWindow.document.getElementsByName("showCorrectAnswers") // name in standalone
+//            // my_button.style.visibility = "hidden"
+//            my_buttons.forEach( button => { button.disabled = true; })
+//            my_buttons = problemiframe.contentWindow.document.getElementsByName("WWcorrectAns") // name in html2xml
+//            // my_button.style.visibility = "hidden"
+//            my_buttons.forEach( button => { button.disabled = true; })
+//        }
     }
 
     function activeButton() {
@@ -102,7 +124,16 @@ function WeBWorKXBlockStandalone(runtime, element, initdata) {
 
             let formData = new FormData(problemForm)
 
-            let clickedButton = problemForm.querySelector('.btn-clicked')
+            // let clickedButton = problemForm.querySelector('.btn-clicked')
+            let clickedButton = event.submitter;
+            if ( clickedButton == null ) {
+                clickedButton = problemForm.querySelector('.btn-clicked');
+            }
+            if ( clickedButton == null ) {
+                console.log('Error could not determine which button was clicked');
+                alert('Error could not determine which button was clicked');
+                return 0;
+            }
             formData.set(clickedButton.name, clickedButton.value);
             formData.set("submit_type", clickedButton.name);
 
@@ -146,5 +177,4 @@ function WeBWorKXBlockStandalone(runtime, element, initdata) {
         hideButtons();
     })
     initialLoad();
-
 }
