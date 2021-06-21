@@ -126,7 +126,7 @@ function WeBWorKXBlockStandalone(runtime, element, initdata) {
 
             // let clickedButton = problemForm.querySelector('.btn-clicked')
             let clickedButton = event.submitter;
-            if ( clickedButton == null ) {
+            if ( clickedButton == null ) { // fallback method
                 clickedButton = problemForm.querySelector('.btn-clicked');
             }
             if ( clickedButton == null ) {

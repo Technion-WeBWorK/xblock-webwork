@@ -10,6 +10,18 @@ using either
         from https://github.com/openwebwork/webwork2/
         which requires running a full "regular" WeBWorK server,
         and is not likely to handle large loads well.
+(c) 2021 Technion - Israel Institute of Technology
+    This code was originally developed in the Technion.
+
+    Effort was made to credit inclusions of snippets of code from other
+    open source projects where such use was made.
+
+    The project is being released under an open source license, see the
+    LICENSE file in the repository.
+
+    Later contributions to the codebase by additional contributors will belong to
+    those contributors, but by being merged into this project or forks of this
+    project are automatically covered by the same license.
 """
 import json
 import random
@@ -52,11 +64,15 @@ logger.addHandler(ch)
 
 # Prepare the dictionaries which are used to set up and to sanitize request data
 
+HTML2XML_JUST_REMOVE = {
+    "send_pg_flags": "1"
+}
+
 HTML2XML_PARAMETERS = {
     "language": "en",
     "displayMode": "MathJax",
     "outputformat": "simple",
-    "send_pg_flags": "1"
+    "standalone_style": "1"
 }
 
 # FIXME  - allow update of answersSubmitted according to user history
@@ -82,6 +98,9 @@ HTML2XML_RESPONSE_PARAMETERS_PREVIEW = dict(HTML2XML_RESPONSE_PARAMETERS_BASE, *
 HTML2XML_RESPONSE_PARAMETERS_SHOWCORRECT = dict(HTML2XML_RESPONSE_PARAMETERS_BASE, **{
     "WWcorrectAns": "Show Correct Answers"
 })
+
+STANDALONE_JUST_REMOVE = {
+}
 
 STANDALONE_PARAMETERS = {
     "language": "en",
@@ -142,6 +161,13 @@ STANDALONE_FORM_SETTINGS_TO_SAVE = [
   'problemSeed',
   'psvn',
   'sourceFilePath'
+]
+
+HTML2XML_FORM_SETTINGS_TO_SAVE = [
+  'problemSeed',
+  'psvn',
+  'sourceFilePath',
+  'problemUUID'
 ]
 
 # =========================================================================================
@@ -713,10 +739,15 @@ class WeBWorKXBlock(
 
         if response_json is None:
             return 'Error'
+        try:
+            raw_state = response_json['renderedHTML']
+        except KeyError:
+                return 'Error'
         if myST == 'html2xml':
             try:
-                raw_state = response_json['html']
-                # Attempt to fix relative URLs for static files
+                # html2xml uses most URLs as relative URLs and that does not work in the
+                # iFrame. Fix the relative URLs for static files using the provided
+                # value.
                 fix_url = self.current_server_settings.get('server_static_files_url')
                 if fix_url:
                     fixed_state = raw_state.replace("\"/webwork2_files", "\"" + fix_url )
@@ -725,10 +756,7 @@ class WeBWorKXBlock(
             except KeyError:
                 return 'Error'
         elif myST == 'standalone':
-            try:
-                fixed_state = response_json['renderedHTML']
-            except KeyError:
-                return 'Error'
+            fixed_state = response_json['renderedHTML']
         else:
             fixed_state = 'Error'
 
@@ -736,33 +764,22 @@ class WeBWorKXBlock(
 
     def _result_from_json_html2xml(self,response_json):
 
-        # At present html2xml using simple format and "send_pg_flags=1" has minimal data
-        # but it is a start for a simple iFrames approach
+        # Revised to use "standalone_style=1" from
+        # https://github.com/openwebwork/webwork2/pull/1426 which is still a draft PR
+        # but that feature/code is in operations on webwork2.technion.ac.il.
 
-        # Right now we are using only what is available from WW 2.16 with "send_pg_flags=1".
-        # Work will be needed on the WW side to provide more data, and then to use it here.
-        kept_answers = response_json.get('pg_flags',{}).get('KEPT_EXTRA_ANSWERS')
+        # Kept as a seperate method - subject to future changes
 
-        # FIXME
-        answers_submitted = {} # FIXME Not currently available from WW side
-        #     {key: value for key, value in response_json.get('form_data',{}).items() if key in kept_answers}
+        kept_answers = response_json.get('flags',{}).get('KEPT_EXTRA_ANSWERS')
+        answers_submitted = {key: value for key, value in response_json.get('form_data',{}).items() if key in kept_answers}
         self.student_answer = answers_submitted
-
-        # FIXME
-        submission_settings = {} # FIXME Not currently available from WW side
-        #     {key: value for key, value in response_json.get('form_data',{}).items() if key in STANDALONE_FORM_SETTINGS_TO_SAVE }
+        submission_settings = {key: value for key, value in response_json.get('form_data',{}).items() if key in HTML2XML_FORM_SETTINGS_TO_SAVE }
         save_answer_results_data = dict()
         raw_answer_results = response_json.get('answers',{})
-
-        # FIXME
-        current_submission_ww_raw_score = 0.0 # FIXME Not currently available from WW side
-        #     float(response_json.get('problem_result',{}).get('score',0.0))
-
-        # FIXME - missing data from WW side to work on
+        current_submission_ww_raw_score = float(response_json.get('problem_result',{}).get('score',0.0))
         for i in raw_answer_results.keys():
             to_save = { key: value for key, value in raw_answer_results.get(i,{}).items() if key in ANSWER_FIELDS_TO_SAVE }
             save_answer_results_data.update( { i : to_save } )
-
         to_store = {
             'provided_settings': {
                 'problemSeed': str(self.seed),
@@ -771,7 +788,7 @@ class WeBWorKXBlock(
             },
             'submission_settings_processed': submission_settings,
             'answers_processed': answers_submitted,
-            'problem_result': response_json.get('problem_result',{}), # FIXME - missing data from WW side to work on
+            'problem_result': response_json.get('problem_result',{}),
             'answer_results_data': save_answer_results_data,
             'num_attempts': self.student_attempts,
             'last_submission_time': str(self.last_submission_time),
@@ -779,6 +796,7 @@ class WeBWorKXBlock(
             'current_submission_scaled_score': current_submission_ww_raw_score * self.get_max_score()
         }
         return to_store
+
 
     def _result_from_json_standalone(self,response_json):
         # Maybe also:
@@ -822,6 +840,7 @@ class WeBWorKXBlock(
     @staticmethod
     def _sanitize_request_html2xml(request):
         for action in (
+            HTML2XML_JUST_REMOVE,
             HTML2XML_REQUEST_PARAMETERS, HTML2XML_RESPONSE_PARAMETERS_SHOWCORRECT,
             HTML2XML_RESPONSE_PARAMETERS_PREVIEW, HTML2XML_RESPONSE_PARAMETERS_CHECK
             ):
@@ -831,6 +850,7 @@ class WeBWorKXBlock(
     @staticmethod
     def _sanitize_request_standalone(request):
         for action in (
+            STANDALONE_JUST_REMOVE,
             STANDALONE_REQUEST_PARAMETERS, STANDALONE_RESPONSE_PARAMETERS_SHOWCORRECT,
             STANDALONE_RESPONSE_PARAMETERS_PREVIEW, STANDALONE_RESPONSE_PARAMETERS_CHECK
             ):
