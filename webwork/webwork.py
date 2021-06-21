@@ -1,5 +1,27 @@
 """
-XBlock that uses WeBWorK's PG grader.
+XBlock that calls WeBWorK's PG problem generation / grading functionality
+using either
+      the Standalone renderer
+        from https://github.com/drdrew42/renderer
+        which is designed for efficient use without a full "regular" WeBWorK server,
+        and is essentially stateless so can be run behind a load balance with some shared
+        storage for all instances for generated files.
+    or the WeBWorK html2xml interface from webwork - version >= 2.16
+        from https://github.com/openwebwork/webwork2/
+        which requires running a full "regular" WeBWorK server,
+        and is not likely to handle large loads well.
+(c) 2021 Technion - Israel Institute of Technology
+    This code was originally developed in the Technion.
+
+    Effort was made to credit inclusions of snippets of code from other
+    open source projects where such use was made.
+
+    The project is being released under an open source license, see the
+    LICENSE file in the repository.
+
+    Later contributions to the codebase by additional contributors will belong to
+    those contributors, but by being merged into this project or forks of this
+    project are automatically covered by the same license.
 """
 import json
 import random
@@ -27,36 +49,30 @@ from xmodule.util.duedate import get_extended_due_date
 #from .sub_api import SubmittingXBlockMixin, sub_api
 
 # Lines to allow logging to console.
-# Taken from https://gitlab.edvsz.hs-osnabrueck.de/lhannigb/showblock/-/blob/master/showblock/showblock.py
-#import logging
-#DEBUGLVL = logging.INFO
-#logger = logging.getLogger(__name__)
-#logger.setLevel(DEBUGLVL)
-#ch = logging.StreamHandler()
-#ch.setLevel(DEBUGLVL)
-#ogger.addHandler(ch)
-# End lines taken from https://gitlab.edvsz.hs-osnabrueck.de/lhannigb/showblock/-/blob/master/showblock/showblock.py
+# Copied from https://gitlab.edvsz.hs-osnabrueck.de/lhannigb/showblock/-/blob/master/showblock/showblock.py
+import logging
+DEBUGLVL = logging.INFO
+logger = logging.getLogger(__name__)
+logger.setLevel(DEBUGLVL)
+ch = logging.StreamHandler()
+ch.setLevel(DEBUGLVL)
+logger.addHandler(ch)
+# End lines copied from https://gitlab.edvsz.hs-osnabrueck.de/lhannigb/showblock/-/blob/master/showblock/showblock.py
 
-WWSERVERAPILIST = {
-    'TechnionFullWW':'https://webwork2.technion.ac.il/webwork2/html2xml',
-    'LocalStandAloneWW':'http://WWStandAlone:3000/render-api',
+
+# =========================================================================================
+
+# Prepare the dictionaries which are used to set up and to sanitize request data
+
+HTML2XML_JUST_REMOVE = {
+    "send_pg_flags": "1"
 }
-
-WWSERVERFILESLIST = {
-    'TechnionFullWW':'https://webwork2.technion.ac.il/webwork2_files',
-    'LocalStandAloneWW':'error',
-}
-
-# SERVER = 'TechnionFullWW'
-SERVER = 'LocalStandAloneWW'
-
-# SERVERTYPE = 'html2xml'
-SERVERTYPE = 'standalone'
 
 HTML2XML_PARAMETERS = {
     "language": "en",
     "displayMode": "MathJax",
-    "outputformat": "json",
+    "outputformat": "simple",
+    "standalone_style": "1"
 }
 
 # FIXME  - allow update of answersSubmitted according to user history
@@ -79,9 +95,12 @@ HTML2XML_RESPONSE_PARAMETERS_PREVIEW = dict(HTML2XML_RESPONSE_PARAMETERS_BASE, *
     "preview": "Preview My Answers"
 })
 
-HTML2XML_RESPONSE_PARAMETERS_CORRECT = dict(HTML2XML_RESPONSE_PARAMETERS_BASE, **{
+HTML2XML_RESPONSE_PARAMETERS_SHOWCORRECT = dict(HTML2XML_RESPONSE_PARAMETERS_BASE, **{
     "WWcorrectAns": "Show Correct Answers"
 })
+
+STANDALONE_JUST_REMOVE = {
+}
 
 STANDALONE_PARAMETERS = {
     "language": "en",
@@ -105,16 +124,18 @@ STANDALONE_RESPONSE_PARAMETERS_BASE = dict(STANDALONE_PARAMETERS, **{
 })
 
 STANDALONE_RESPONSE_PARAMETERS_CHECK = dict(STANDALONE_RESPONSE_PARAMETERS_BASE, **{
-    "WWsubmit": "Check Answers"
+    "submitAnswers": "Check Answers"
 })
 
 STANDALONE_RESPONSE_PARAMETERS_PREVIEW = dict(STANDALONE_RESPONSE_PARAMETERS_BASE, **{
-    "preview": "Preview My Answers"
+    "previewAnswers": "Preview My Answers"
 })
 
-STANDALONE_RESPONSE_PARAMETERS_CORRECT = dict(STANDALONE_RESPONSE_PARAMETERS_BASE, **{
-    "WWcorrectAns": "Show Correct Answers"
+STANDALONE_RESPONSE_PARAMETERS_SHOWCORRECT = dict(STANDALONE_RESPONSE_PARAMETERS_BASE, **{
+    "showCorrectAnswers": "Show Correct Answers"
 })
+
+# =========================================================================================
 
 # Fields from the answer hash data we want to save
 ANSWER_FIELDS_TO_SAVE = [
@@ -122,16 +143,18 @@ ANSWER_FIELDS_TO_SAVE = [
   "ans_message",
   "ans_name",
   "cmp_class",
-  "correct_ans_latex_string",
+#  "correct_ans_latex_string",
   "correct_value",
   "error_message",
   "original_student_ans",
-  "preview_latex_string",
+#  "preview_latex_string",
   "score",
   "student_formula",
   "student_value",
   "type"
 ]
+
+# =========================================================================================
 
 # Fields from Standalone "form_data" we want to save - shows what was processed
 STANDALONE_FORM_SETTINGS_TO_SAVE = [
@@ -139,6 +162,15 @@ STANDALONE_FORM_SETTINGS_TO_SAVE = [
   'psvn',
   'sourceFilePath'
 ]
+
+HTML2XML_FORM_SETTINGS_TO_SAVE = [
+  'problemSeed',
+  'psvn',
+  'sourceFilePath',
+  'problemUUID'
+]
+
+# =========================================================================================
 
 class WeBWorKXBlockError(RuntimeError):
     pass
@@ -173,80 +205,13 @@ class WWProblemPeriod:
     def period(self):
         self._period = PPeriods.UnKnown
 
-# The code below is NOT being used. If it is needed - it should be in a different file.
-# FIXME - this should be kept in a different file, clearly keeping the code from that
-# project separate from that of this project.
-class StudentViewUserStateMixin:
-    """
-    This class has been copy-pasted from the problem-builder xblock file mixins.py
-    https://github.com/open-craft/problem-builder/blob/master/problem_builder/mixins.py
-    which is licensed under the GNU AFFERO GENERAL PUBLIC LICENSE version 3
-    https://github.com/open-craft/problem-builder/blob/master/LICENSE
-
-    This code provides student_view_user_state view.
-
-    To prevent unnecessary overloading of the build_user_state_data method,
-    you may specify `USER_STATE_FIELDS` to customize build_user_state_data
-    and student_view_user_state output.
-    """
-    NESTED_BLOCKS_KEY = "components"
-    INCLUDE_SCOPES = (Scope.user_state, Scope.user_info, Scope.preferences)
-    USER_STATE_FIELDS = []
-
-    def transforms(self):
-        """
-        Return a dict where keys are fields to transform, and values are
-        transform functions that accept a value to to transform as the
-        only argument.
-        """
-        return {}
-
-    def build_user_state_data(self, context=None):
-        """
-        Returns a dictionary of the student data of this XBlock,
-        retrievable from the student_view_user_state XBlock handler.
-        """
-
-        result = {}
-        transforms = self.transforms()
-        for _, field in six.iteritems(self.fields):
-            # Only insert fields if their scopes and field names match
-            if field.scope in self.INCLUDE_SCOPES and field.name in self.USER_STATE_FIELDS:
-                transformer = transforms.get(field.name, lambda value: value)
-                result[field.name] = transformer(field.read_from(self))
-
-        if getattr(self, "has_children", False):
-            components = {}
-            for child_id in self.children:
-                child = self.runtime.get_block(child_id)
-                if hasattr(child, 'build_user_state_data'):
-                    components[str(child_id)] = child.build_user_state_data(context)
-
-            result[self.NESTED_BLOCKS_KEY] = components
-
-        return result
-
-    @XBlock.handler
-    def student_view_user_state(self, context=None, suffix=''):
-        """
-        Returns a JSON representation of the student data of this XBlock.
-        """
-        result = self.build_user_state_data(context)
-        json_result = json.dumps(result, cls=DateTimeEncoder)
-
-        return webob.response.Response(
-            body=json_result.encode('utf-8'),
-            content_type='application/json'
-        )
-
 @XBlock.needs("user")
 class WeBWorKXBlock(
     ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin,
     #SubmittingXBlockMixin,  # Needed if using the the submissions API
-#    StudentViewUserStateMixin # apparently not needed - grades/state saving without it
     ):
     """
-    XBlock that uses WeBWorK's PG grader.
+    XBlock that calls WeBWorK's PG problem generation / grading functionality
     """
     # Makes LMS icon appear as a problem
     icon_class = 'problem'
@@ -303,32 +268,60 @@ class WeBWorKXBlock(
         del self._problem_period
 
     def period_button_settings( self ):
+        # At present the code disables the buttons but does not hide them.
         my_return_dict = {
             'hideShowAnswers': False,
             'hidePreview': False,
             'hideSubmit': False
         }
         if self.problem_period is PPeriods.NoDue:
-            if self.max_attempts > 0 and self.student_attempts <= self.max_attempts:
+            if self.max_attempts > 0 and self.student_attempts < self.max_attempts:
+                # Did not submit enough attempts to be permitted to see answers
+                my_return_dict.update( {
+                    'hideShowAnswers': True,
+                })
+            elif self.max_attempts == 0 and self.student_attempts < self.no_attempt_limit_required_attempts_before_show_answers:
+                # Did not submit enough attempts to be permitted to see answers
                 my_return_dict.update( {
                     'hideShowAnswers': True,
                 })
         elif self.problem_period is PPeriods.PreDue:
-            if self.max_attempts > 0 and self.student_attempts > self.max_attempts:
+            if self.max_attempts > 0:
+                if self.student_attempts >= self.max_attempts:
+                    # Used all allowed pre-deadline submission. Disable all buttons.
+                    my_return_dict.update( {
+                        'hideShowAnswers': True,
+                        'hidePreview': True,
+                        'hideSubmit': True
+                    })
+                else:
+                    # Only prevent use of Show Answers
+                    my_return_dict.update( {
+                        'hideShowAnswers': True,
+                    })
+            elif self.max_attempts == 0 and self.student_attempts < self.no_attempt_limit_required_attempts_before_show_answers:
+                # Only prevent use of Show Answers
+                my_return_dict.update( {
+                    'hideShowAnswers': True,
+                })
+            else:
+                # should not occur - so disable all buttons
                 my_return_dict.update( {
                     'hideShowAnswers': True,
                     'hidePreview': True,
-                    'hideSubmit': True
-                })
-            else:
-                my_return_dict.update( {
-                    'hideShowAnswers': True,
+                     'hideSubmit': True
                 })
         elif self.problem_period is PPeriods.PostDueLocked:
+            # Lock-down period - disable all buttons
             my_return_dict.update( {
                 'hideShowAnswers': True,
                 'hidePreview': True,
                 'hideSubmit': True
+            })
+        if not self.allow_show_answers:
+            # When a problem is configured to prevent any use of Show Answers - disable the button
+            my_return_dict.update( {
+                'hideShowAnswers': True,
             })
         return( my_return_dict )
 
@@ -351,8 +344,16 @@ class WeBWorKXBlock(
              self.reload_main_setting()
         return int(self.main_settings.get('course_defaults',{}).get('psvn_shift',0))
 
-    # Current server connection related settings
-    current_server_settings = {}
+    # Current server connection related settings.
+    # Make it an XBlock field to try to make sure it remains fixed per XBlock instance,
+    # and does not cross between instances. Without doing this, and trying it as a
+    # "plain" variable in the class - errors occurred as the value would sometimes be
+    # from the "wrong" XBlock instance, which led to loading errors.
+    current_server_settings = Dict(
+       display_name = _("Current server settings for this block"),
+       scope = Scope.user_state, # Scope.settings did not work - cannot be set by LMS
+       help= ("This is the current server settings for this block."),
+    )
 
     def clear_current_server_settings(self):
         self.current_server_settings.clear()
@@ -362,18 +363,34 @@ class WeBWorKXBlock(
         if self.settings_type == 1:
             # Use the course-wide settings for the relevant ww_server_id
             self.current_server_settings.update(self.main_settings.get('server_settings',{}).get(self.ww_server_id, {}))
-            self.current_server_settings.update({"server_static_files_url":None}) # Not used by standalone
+            # Keep auth_data outside the current_server_settings field (which gets into the DB records of user_state/submissions).
+            self.current_server_settings.pop("auth_data")
         elif self.settings_type == 2:
             # Use the locally set values from the specific XBlock instance
             self.current_server_settings.update({  # Need str() on the first 2 to force into a final string form, and not __proxy__
                 "server_type":             str(self.ww_server_type),
-                "server_api_url":          str(self.ww_server_api_url),
-                "auth_data":               self.auth_data, # But no str() here - as it is a Dict
+                "server_api_url":          str(self.ww_server_api_url)
+                #,
+                #"auth_data":               self.auth_data, # But no str() here - as it is a Dict
             })
             if self.ww_server_type == "html2ml":
                 self.current_server_settings.update({
                     "server_static_files_url": str(self.ww_server_static_files_url)
                 })
+        myST = self.current_server_settings.get("server_type","")
+
+        #logger.info("At end of set_current_server_settings for {UID} and see server_type as {ST}".format(UID=self.unique_id, ST = myST ))
+
+    # The auth_data should be retrieved for use when a request is being made and
+    # is not included in the current_server_settings, so it does not get logged to
+    # the database as part of the user_state of the XBlock.
+    def get_current_auth_data(self):
+        if self.settings_type == 1:
+            # Use the course-wide settings for the relevant ww_server_id
+            return self.main_settings.get('server_settings',{}).get(self.ww_server_id, {}).get('auth_data',{}) # FIXME do we need .copy()
+        elif self.settings_type == 2:
+            # Use the locally set values from the specific XBlock instance
+            return self.auth_data # FIXME do we need .copy()
 
     def set_ww_server_id_options(self):
         """
@@ -403,12 +420,13 @@ class WeBWorKXBlock(
         # For manual server setting
         'ww_server_type', 'ww_server_api_url', 'ww_server_static_files_url', 'auth_data',
         # Main problem settings
-        'problem', 'max_allowed_score', 'max_attempts', 'weight', 'psvn_key',
+        'problem', 'max_allowed_score',
+        'max_attempts', 'no_attempt_limit_required_attempts_before_show_answers',
+        'weight', 'psvn_key',
         # Less important settings
-        'display_name',
-        'show_answers',
-        'display_name', 'webwork_request_timeout',
-        'post_deadline_lockdown', # FIXME - probably being replaced
+        'allow_show_answers',
+        'problem_banner_text', 'webwork_request_timeout',
+        'post_deadline_lockdown',
         'iframe_min_height', 'iframe_max_height', 'iframe_min_width'
         )
 
@@ -443,14 +461,13 @@ class WeBWorKXBlock(
             {"display_name": "standalone renderer", "value": "standalone"},
             {"display_name": "html2xml interface on a regular server", "value": "html2xml"},
        ],
-       default = _(SERVERTYPE),
+       default = 'standalone',
        help=_("This is the type of webwork server rendering and grading the problems (html2xml or standalone)."),
     )
 
     ww_server_api_url = String(
        display_name = _("WeBWorK server address with API endpoint"),
        # FIXME - this should depend on a main course setting
-       default = _(WWSERVERAPILIST[SERVER]),
        scope = Scope.settings,
        help=_("This is the full URL of the webwork server including the path to the html2xml or render-api endpoint."),
     )
@@ -458,7 +475,6 @@ class WeBWorKXBlock(
     ww_server_static_files_url = String(
        display_name = _("WeBWorK server address with path for static files"),
        # FIXME - this should depend on a main course setting
-       default = _(WWSERVERFILESLIST[SERVER]),
        scope = Scope.settings,
        help=_("This is the URL of the path to static files on the webwork server."),
     )
@@ -469,23 +485,17 @@ class WeBWorKXBlock(
        help=_("This is the authentication data needed to interface with the server. Required fields depend on the servert type."),
     )
 
-    display_name = String(
-       display_name = _("Display Name"),
+    problem_banner_text = String(
+       display_name = _("Problem Banner Text"),
        default = _("WeBWorK Problem"),
        scope = Scope.settings,
-       help=_("This name appears in the horizontal navigation at the top of the page."),
+       help=_("This text appears as an H3 header above the problem."),
     )
 
     problem = String(
         display_name = _("Problem"),
-        # default = "Technion/LinAlg/Matrices/en/SplitAsUpperLower.pg",
         default = "Library/Dartmouth/setMTWCh2S4/problem_5.pg",
-        # Next line is for when working with full local docker webwork
-        # default = "SplitAsUpperLower.pg",
-        # default = "part01a.pg",
-        # Next line is for when working with local docker StandAlone webwork
-        # default = "Library/SUNYSB/functionComposition.pg",
-        scope = Scope.settings, # settings, so a course can modify, if needed
+        scope = Scope.settings, # settings, so a course can modify, if needed, and not only Studio
         help = _("The path to load the problem from."),
     )
 
@@ -493,29 +503,35 @@ class WeBWorKXBlock(
         display_name = _("Maximum score"),
         default = 100,
         scope = Scope.settings,
-        help = _("Max possible score attainable"),
+        help = _("Maximum possible score for this problem (the webwork score between 0 and 1 will be multiplied by this factor)"),
     )
 
     max_attempts = Integer(
-        display_name = _("Allowed Submissions"),
+        display_name = _("Allowed (for credit) submissions"),
         default = 0,
         scope = Scope.settings,
-        help = _("Max number of allowed submissions (0 = unlimited)"),
+        help = _("Maximum number of allowed submissions for credit (0 = unlimited)"),
     )
 
-    # FIXME - probably being replaced
+    no_attempt_limit_required_attempts_before_show_answers  = Integer(
+        display_name = _("No attempts limit case - attempts before Show Answers is permitted"),
+        default = 10,
+        scope = Scope.settings,
+        help = _("When an unlimited number of submissions are permitted, this sets the number of submissions required before Show Answers is permitted"),
+    )
+
     post_deadline_lockdown = Integer(
         display_name = _("Post deadline lockdown period (in hours) when submission is not permitted"),
         default = 24,
         scope = Scope.settings,
-        help = _("How long, in hours, should the problem be locked after the deadline (except during the grace period) before submission is allowed again (0 = no delay)"),
+        help = _("How long, in hours, should the problem be locked after the deadline (and the grace period) before submission is allowed again (0 = no delay)"),
     )
 
-    show_answers = Boolean(
+    allow_show_answers = Boolean(
         display_name = _("Show Answers"),
-        default = False,
+        default = True,
         scope = Scope.settings,
-        help = _("Allow students to view correct answers?"),
+        help = _("Allow students to view correct answers (after deadline or if no deadline after all attempts used / or required number of attempts used when there is no attempt limit.)?"),
     )
 
     custom_parameters = List(
@@ -584,6 +600,13 @@ class WeBWorKXBlock(
         default = None,
         scope = Scope.user_state,
         help = _("Data to save as part of a submission."),
+    )
+
+    student_viewed_correct_answers = Boolean(
+        display_name = _("Student viewed the correct answers"),
+        default = False,
+        scope = Scope.user_state,
+        help = _("Did the student already view the correct answers?"),
     )
 
     # WeBWorK uses psvn to set a seed for groups of problems which need to have the same seed.
@@ -690,46 +713,72 @@ class WeBWorKXBlock(
     # ---------- Utils --------------
 
     def _problem_from_json(self,response_json):
-
-        # Rederly standalone - need:
-        #     everything between <body> and </body>
-        # and then the JS loads
-        #     between <!-- JS Loads --> and BEFORE <title>
         fixed_state = 'Error' # Fallback
+
+        myST = self.current_server_settings.get("server_type","")
+
+        #logger.info("In _problem_from_json for {UID} and see server_type as {ST}".format(UID=self.unique_id, ST = myST ))
 
         if response_json is None:
             return 'Error'
-        # Replace source address where needed
-        if self.current_server_settings.get("server_type","") == 'html2xml':
-            raw_state = \
-                response_json['body_part100'] + response_json['body_part300'] + \
-                response_json['body_part500'] + response_json['body_part530'] + \
-                response_json['body_part550'] + response_json['body_part590'] + \
-                response_json['body_part700'] + response_json['body_part999'][:-16]
-                # Left out
-                # + \
-                #response_json["head_part200"]
-            # Attempt to fix relative URLs for static files
-            fix_url = self.current_server_settings.get('server_static_files_url')
-            if fix_url:
-                fixed_state = raw_state.replace(
-                     "\"/webwork2_files", "\"" + fix_url )
-            else:
-                fixed_state = raw_state
-        elif self.current_server_settings.get("server_type","") == 'standalone':
-            # raw_state = str(response_json.content)
-            # fixed_state = raw_state.replace(
-            #     '/webwork2_files', 'http://WWStandAlone:3000/webwork2_files')
+        try:
+            raw_state = response_json['renderedHTML']
+        except KeyError:
+                return 'Error'
+        if myST == 'html2xml':
+            try:
+                # html2xml uses most URLs as relative URLs and that does not work in the
+                # iFrame. Fix the relative URLs for static files using the provided
+                # value.
+                fix_url = self.current_server_settings.get('server_static_files_url')
+                if fix_url:
+                    fixed_state = raw_state.replace("\"/webwork2_files", "\"" + fix_url )
+                else:
+                    fixed_state = raw_state
+            except KeyError:
+                return 'Error'
+        elif myST == 'standalone':
             fixed_state = response_json['renderedHTML']
         else:
             fixed_state = 'Error'
 
         return fixed_state
 
-    def _result_from_json_html2xml_split_json(self,response_json):
-        if response_json is None:
-            return "Error"
-        return response_json['body_part300']
+    def _result_from_json_html2xml(self,response_json):
+
+        # Revised to use "standalone_style=1" from
+        # https://github.com/openwebwork/webwork2/pull/1426 which is still a draft PR
+        # but that feature/code is in operations on webwork2.technion.ac.il.
+
+        # Kept as a seperate method - subject to future changes
+
+        kept_answers = response_json.get('flags',{}).get('KEPT_EXTRA_ANSWERS')
+        answers_submitted = {key: value for key, value in response_json.get('form_data',{}).items() if key in kept_answers}
+        self.student_answer = answers_submitted
+        submission_settings = {key: value for key, value in response_json.get('form_data',{}).items() if key in HTML2XML_FORM_SETTINGS_TO_SAVE }
+        save_answer_results_data = dict()
+        raw_answer_results = response_json.get('answers',{})
+        current_submission_ww_raw_score = float(response_json.get('problem_result',{}).get('score',0.0))
+        for i in raw_answer_results.keys():
+            to_save = { key: value for key, value in raw_answer_results.get(i,{}).items() if key in ANSWER_FIELDS_TO_SAVE }
+            save_answer_results_data.update( { i : to_save } )
+        to_store = {
+            'provided_settings': {
+                'problemSeed': str(self.seed),
+                'psvn': str(self.get_psvn()),
+                'sourceFilePath': str(self.problem)
+            },
+            'submission_settings_processed': submission_settings,
+            'answers_processed': answers_submitted,
+            'problem_result': response_json.get('problem_result',{}),
+            'answer_results_data': save_answer_results_data,
+            'num_attempts': self.student_attempts,
+            'last_submission_time': str(self.last_submission_time),
+            'current_submission_ww_raw_score': current_submission_ww_raw_score,
+            'current_submission_scaled_score': current_submission_ww_raw_score * self.get_max_score()
+        }
+        return to_store
+
 
     def _result_from_json_standalone(self,response_json):
         # Maybe also:
@@ -763,10 +812,18 @@ class WeBWorKXBlock(
         }
         return to_store
 
+    def _result_from_json(self,response_json):
+        if self.current_server_settings.get("server_type") == 'standalone':
+            return self._result_from_json_standalone(response_json)
+        if self.current_server_settings.get("server_type") == 'html2xml':
+            return self._result_from_json_html2xml(response_json)
+        return {} # Fallback
+
     @staticmethod
     def _sanitize_request_html2xml(request):
         for action in (
-            HTML2XML_REQUEST_PARAMETERS, HTML2XML_RESPONSE_PARAMETERS_CORRECT,
+            HTML2XML_JUST_REMOVE,
+            HTML2XML_REQUEST_PARAMETERS, HTML2XML_RESPONSE_PARAMETERS_SHOWCORRECT,
             HTML2XML_RESPONSE_PARAMETERS_PREVIEW, HTML2XML_RESPONSE_PARAMETERS_CHECK
             ):
             for key in action:
@@ -775,23 +832,24 @@ class WeBWorKXBlock(
     @staticmethod
     def _sanitize_request_standalone(request):
         for action in (
-            STANDALONE_REQUEST_PARAMETERS, STANDALONE_RESPONSE_PARAMETERS_CORRECT,
+            STANDALONE_JUST_REMOVE,
+            STANDALONE_REQUEST_PARAMETERS, STANDALONE_RESPONSE_PARAMETERS_SHOWCORRECT,
             STANDALONE_RESPONSE_PARAMETERS_PREVIEW, STANDALONE_RESPONSE_PARAMETERS_CHECK
             ):
             for key in action:
                 request.pop(key, None)
 
-    def request_webwork_html2xml_split_json(self, params):
+    def _sanitize_request(self, request):
+        if self.current_server_settings.get("server_type") == 'standalone':
+            self._sanitize_request_standalone(request)
+        elif self.current_server_settings.get("server_type") == 'html2xml':
+            self._sanitize_request_html2xml(request)
+
+    def request_webwork_html2xml(self, params):
         # html2xml uses HTTP GET
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
-
-        # Get updated main course settings from main course "Other course settings"
-        # Do this now, as we may need updated main connection settings
-        self.reload_main_setting()
-        # and then
-        self.set_current_server_settings()
         my_url = self.current_server_settings.get("server_api_url")
-        my_auth_data = self.current_server_settings.get("auth_data",{})
+        my_auth_data = self.get_current_auth_data()
         if my_url:
             my_res = requests.get(my_url, params=dict(
                     params,
@@ -812,12 +870,7 @@ class WeBWorKXBlock(
         # and outputFormat set to "simple" and format set to "json".
         # Check by examining form parameters from Rederly UI on "render" call.
 
-        # Get updated main course settings from main course "Other course settings"
-        # Do this now, as we may need updated main connection settings
         my_timeout = max(self.webwork_request_timeout,0.5)
-        self.reload_main_setting()
-        # and then
-        self.set_current_server_settings()
 
         my_url = self.current_server_settings.get("server_api_url")
         if my_url:
@@ -833,6 +886,13 @@ class WeBWorKXBlock(
                 return my_res.json()
             return None
             
+    def request_webwork(self, params):
+
+        if self.current_server_settings.get("server_type") == 'standalone':
+            return self.request_webwork_standalone(params)
+
+        if self.current_server_settings.get("server_type") == 'html2xml':
+            return self.request_webwork_html2xml(params)
 
     # ----------- Grading related code -----------
     """
@@ -875,8 +935,13 @@ class WeBWorKXBlock(
         This method should not modify the state of the XBlock.
         Returns:
             Score(raw_earned=float, raw_possible=float)
+        Since we do not allow "rescoring" it returns the currently saved score
         """
         return Score(float(self.best_student_score), float(self.get_max_score()))
+
+    def allows_rescore(self):
+        # This XBlock does not allow rescoring of submitted answers.
+        return False
 
     def get_max_score(self):
         """
@@ -891,18 +956,23 @@ class WeBWorKXBlock(
         data = pkg_resources.resource_string(__name__, path)
         return data.decode("utf8")
 
-    def set_gracperiod(self):
-        try:
-            self.graceperiod = CourseGradingModel.fetch(self.course.id).grace_period
-        except AttributeError:
-            self.graceperiod = None
+# Not in use
+#    def set_graceperiod(self):
+#        try:
+#            self.graceperiod = CourseGradingModel.fetch(self.course.id).grace_period
+#        except AttributeError:
+#            self.graceperiod = None
 
     # ----------- View -----------
-    def student_view(self, context=None, show_detailed_errors=False):
+    # FIXME
+    def student_view(self, context=None, show_detailed_errors=True):
+    #def student_view(self, context=None, show_detailed_errors=False):
         """
         The primary view of the XBlock, shown to students
-        when viewing courses.
+        when viewing courses. (iFramed: standalone or html2xml)
         """
+
+        #logger.info("Starting student view for {UID}".format(UID=self.unique_id))
 
         # Get updated main course settings from main course "Other course settings"
         # Do this now, as we may need updated main connection settings
@@ -910,50 +980,6 @@ class WeBWorKXBlock(
         # and then
         self.set_current_server_settings()
 
-        if self.current_server_settings.get("server_type") == 'html2xml':
-            return self.student_view_html2xml_no_iframe(self)
-        if self.current_server_settings.get("server_type") == 'standalone':
-            return self.student_view_standalone(self)
-        return self.student_view_error(self)
-
-    # ----------- View for html2xml -----------
-
-    #FIXME
-    #def student_view_html2xml_no_iframe(self, context=None, show_detailed_errors=False):
-    def student_view_html2xml_no_iframe(self, context=None, show_detailed_errors=True):
-        """
-        The primary view of the XBlock, shown to students
-        when viewing courses. For html2xml interface use
-        """
-        if not self.seed:
-            self.seed = random.randint(1,2**31-1)
-
-
-        if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
-            disabled = True
-
-        form = self._problem_from_json(self.request_webwork_html2xml_split_json(HTML2XML_REQUEST_PARAMETERS))
-
-        # hide the show answers button
-        if not self.show_answers:
-            form += "<style> input[name='WWcorrectAns']{display: none !important;}</style>"
-
-        html = self.resource_string("static/html/webwork_html2xml_no_iframe.html")
-        frag = Fragment(html.format(self=self,form=form))
-        frag.add_css(self.resource_string("static/css/webwork.css"))
-        frag.add_javascript(self.resource_string("static/js/src/webwork_html2xml_no_iframe.js"))
-        frag.initialize_js('WeBWorKXBlockHtml2xmlNoIframe')
-        return frag
-
-    # ----------- View for standalone -----------
-
-    # FIXME
-    #def student_view_standalone(self, context=None, show_detailed_errors=False):
-    def student_view_standalone(self, context=None, show_detailed_errors=True):
-        """
-        The primary view of the XBlock, shown to students
-        when viewing courses. For standalone renderer use
-        """
         if not self.seed:
             self.seed = random.randint(1,2**31-1)
 
@@ -963,16 +989,13 @@ class WeBWorKXBlock(
         html_settings = 'lang=\"{}\" dir=\"{}\"'.format("en","ltr")
         loading1 = "Your problem should load soon."
         loading2 = "Please wait."
-        loadingHtml = "<html {html_settings}><body>{loading1}<br>{loading1}</body></html>"
+        loadingHtml = "<html {html_settings}><body>{loading1}<br>{loading2}</body></html>"
         mysrcdoc = loadingHtml.format(html_settings = html_settings,
             loading1 = loading1, loading2 = loading2 )
-#        self._problem_from_json(self.request_webwork_standalone(STANDALONE_REQUEST_PARAMETERS)
-#           ).replace( "&", "&amp;"      # srcdoc needs "&" encoded
-#           ).replace( "\"", "&quot;" )  # srcdoc needs double quotes encoded. Must do second.
-#           #.replace( "<br/>", "" )
 
         debug_data1 = self.current_server_settings.copy()
         debug_data1.update({
+            "settings_type": self.settings_type,
             "psvn_options_": self.psvn_options,
             "psvn":self.get_psvn(),
             "unique_id":str(self.unique_id),
@@ -993,12 +1016,12 @@ class WeBWorKXBlock(
            ', minWidth: '  + str(self.iframe_min_width)  + \
            '}, "#' + iframe_id + '")\n //]]></script>'
 
-        html = self.resource_string("static/html/webwork_standalone.html")
+        html = self.resource_string("static/html/webwork_in_iframe.html")
 
         messageDiv_id = 'edx_message-' + self.unique_id;
         resultDiv_id  = 'edx_webwork_result-' + self.unique_id;
 
-        js1  = self.resource_string("static/js/src/webwork_standalone.js")
+        js1  = self.resource_string("static/js/src/webwork_in_iframe.js")
 
         frag = Fragment( html.format(
             self = self,
@@ -1013,170 +1036,109 @@ class WeBWorKXBlock(
         frag.add_css(self.resource_string("static/css/webwork.css"))
         frag.add_javascript( js1 )
 
-#        self.set_problem_period() # Needed to get button settings
-#        my_settings = self.period_button_settings()
-#        my_settings.update({
         my_settings = {
           'unique_id' : self.unique_id,
           'rpID' : iframe_id,
           'messageDivID' : messageDiv_id,
           'resultDivID' : resultDiv_id
         }
-#        )
 
-        frag.initialize_js('WeBWorKXBlockStandalone', my_settings)
+        frag.initialize_js('WeBWorKXBlockIframed', my_settings)
 
         return frag
 
-
-    # ----------- View for error -----------
-
-    def student_view_error(self, context=None, show_detailed_errors=False):
+    def create_attempts_message(self):
         """
-        The primary view of the XBlock, shown to students
-        when viewing courses. When error hit
+        Message to show about attempts status
         """
+        if self.student_attempts > 0:
+            attempts_message1 = "So far you have made {attempts_used} graded submissions to this problem.".format(
+                attempts_used = str(self.student_attempts))
+        else:
+            attempts_message1 = "You have not yet made a graded submission to this problem."
 
-        form = ""
+        if self.max_attempts > 0:
+            attempts_message2 = "You are allowed at most {max_attempts} graded submissions to this problem.".format(
+                max_attempts = str(self.max_attempts))
+        elif self.max_attempts == 0:
+            attempts_message2 = "You are allowed an unlimited number of graded submissions to this problem."
+        return "<br>{m1}<br>{m2}".format( m1 = attempts_message1, m2 = attempts_message2)
 
-        html = self.resource_string("static/html/webwork_html2xml_no_iframe.html")
-        frag = Fragment(html.format(self=self,form=form))
-        frag.add_css(self.resource_string("static/css/webwork.css"))
-        return frag
+    def create_current_score_message(self):
+        """
+        Message to show for current score (on load, show correct, show preview)
+        """
+        my_attempts_message = self.create_attempts_message()
+        if self.student_attempts == 0:
+            return my_attempts_message
+        else:
+            return "Your recorded (best) score is {old_best} points from {max_score} points.{attempts_message}".format(
+                old_best = str(self.best_student_score), max_score = str(self.get_max_score()),
+                attempts_message = my_attempts_message )
+
 
     def create_score_message(self, new_score, score_saved):
         """
         Message to show for score received now.
         """
-        attempts_message1 = "<br>So far you have made " + str(self.student_attempts) + " graded submissions to this problem."
-        attempts_message2 = "<br>You are allowed at most " + str(self.max_attempts) + " graded submissions to this problem."
-        if self.max_attempts == 0:
-            attempts_message2 = "<br>You are allowed an unlimited number of graded submissions to this problem."
+        my_attempts_message = self.create_attempts_message()
 
         if score_saved:
             if new_score > self.best_student_score:
-                return 'You score from this submission is ' + \
-                    str(new_score) + ' from ' + str(self.get_max_score()) + \
-                    ' points, which will replace your prior best score of ' + \
-                    str(self.best_student_score) + ' points.' + attempts_message1 + attempts_message2
+                return "You score from this submission is {new_score} from {max_score} points.".format(
+                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + \
+                    "The new score will replace your prior best score of {old_best} points.{attempts_message}".format(
+                        old_best = str(self.best_student_score), attempts_message = my_attempts_message )
             else:
-                return 'You score from this submission is ' + \
-                    str(new_score) + ' from ' + str(self.get_max_score()) + \
-                    ' points. Your prior best score was ' + \
-                    str(self.best_student_score) + ' points, and remains your current saved score.' + attempts_message1 + attempts_message2
+                return "You score from this submission is {new_score} from {max_score} points.".format(
+                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + \
+                    "That is less than your prior best score of {old_best} points, so the prior score remains your current recorded score for the problem.{attempts_message}".format(
+                        old_best = str(self.best_student_score), attempts_message = my_attempts_message )
         else:
-            return 'This is a submission which is not for credit.<br>You score from this submission is ' + \
-                    str(new_score) + ' from ' + str(self.get_max_score()) + \
-                    ' points.<br>Your recorded best score on this problem is ' + \
-                    str(self.best_student_score) + ' points.'
-
-    # ----------- Handler for htm2lxml_no_iframe-----------
-    @XBlock.handler
-    def submit_webwork_html2xml_no_iframe(self, request_original, suffix=''):
-        """
-        Handle the student's submission.
-        """
-        response = {
-            'success': False,
-            'message': "Unexpected error occurred!",
-            'data': '',
-            'score': '',
-            'scored': False
-        }
-
-        try:
-            # Copy the request
-            request = request_original.json.copy()
-            self._sanitize_request_html2xml(request)
-
-            # Handle check answer
-            if request['submit_type'] == "WWsubmit":
-
-                if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
-                    raise WeBWorKXBlockError("Maximum allowed attempts reached")
-
-                if self.is_past_due():
-                    raise WeBWorKXBlockError("Problem deadline has passed")
-
-                #self.student_answer = request_original.copy() # This is far too to much
-                self.student_answer = request.copy() # This is really to much
-                self.student_attempts += 1
-                response['scored'] = True
-
-                response_parameters = HTML2XML_RESPONSE_PARAMETERS_CHECK
-
-            # Handle show correct answer
-            elif request['submit_type'] == "WWcorrectAns":
-
-                if not self.show_answers:
-                    raise WeBWorKXBlockError("Answers may not be shown for this problem")
-
-                response_parameters = HTML2XML_RESPONSE_PARAMETERS_CORRECT
-
-            # Handle preview answer
-            elif request['submit_type'] == "preview":
-                response_parameters = HTML2XML_RESPONSE_PARAMETERS_PREVIEW
-
-            else:
-                raise WeBWorKXBlockError("Unknown submit button used")
-
-            # Looks good! Send the data to WeBWorK
-            request.update(response_parameters)
-
-            webwork_response = self.request_webwork_html2xml_split_json(request)
-
-            # This is the "answer" that is recorded in the mysql DB tables.
-            # TODO: We need to build a better JSON object to store for the html2xml option
-
-            response["data"] = self._result_from_json_html2xml_split_json(webwork_response)
-
-            # The next line can add something into "student_answer" which ends up in the submission saved data
-            #self.student_answer.update({"aa":"bb"})
-
-            if response["scored"]:
-                raw_ww_score = float(webwork_response["score"])
-                self.best_student_score = raw_ww_score * self.get_max_score()
-                response["score"] = float(self.best_student_score)
-
-                # Also send to the submissions API - if needed
-                # see discussion below. Does not seem necessary for webwork
-                #if sub_api:
-                #    sub_api.create_submission(self.student_item_key, response)
-
-                # Need to update the code here
-                self.save()
-                self.runtime.publish(self, 'grade', {
-                    'value': float(self.best_student_score),
-                    'max_value': self.get_max_score()
-                })
-
-            response['success'] = True
-            response['message'] = "Success!"
-
-
-        except WeBWorKXBlockError as e:
-            response['message'] = e.message
-
-        return Response(
-                text = json.dumps(response),
-                content_type =  "application/json",
-                status = 200,
-            )
-
+            return "<strong>" + "This is a submission which is not for credit." + "</strong><br>" + \
+                "You score from this submission is {new_score} from {max_score} points.".format(
+                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + \
+                "Your recorded best score on the problem is {old_best} points.".format(
+                    new_score = str(new_score), max_score = str(self.get_max_score()), old_best = str(self.best_student_score) )
 
     # ----------- Handler for standalone -----------
     @XBlock.handler
-    def submit_webwork_standalone(self, request_original, suffix=''):
+    def submit_webwork_iframed(self, request_original, suffix=''):
         """
         Handle the student's submission.
         """
         response = {
             'success': False, # Set ONLY when the HTML in the iFrame should be replaced
             'message': "An unexpected error occurred!",
-            'data': '',
             'score': '',
             'scored': False
         }
+
+        #logger.info("Starting submit_webwork_iframed for {UID}".format(UID=self.unique_id))
+
+        # Make sure server settings are up to date
+        self.reload_main_setting()
+        self.set_current_server_settings()
+
+        if self.current_server_settings.get("server_type") == 'standalone':
+            # Settings for standalone calls
+            REQUEST_PARAMETERS              = STANDALONE_REQUEST_PARAMETERS
+            RESPONSE_PARAMETERS_CHECK       = STANDALONE_RESPONSE_PARAMETERS_CHECK
+            RESPONSE_PARAMETERS_PREVIEW     = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
+            RESPONSE_PARAMETERS_SHOWCORRECT = STANDALONE_RESPONSE_PARAMETERS_SHOWCORRECT
+        elif self.current_server_settings.get("server_type") == 'html2xml':
+            # Settings for standalone calls
+            REQUEST_PARAMETERS              = HTML2XML_REQUEST_PARAMETERS
+            RESPONSE_PARAMETERS_CHECK       = HTML2XML_RESPONSE_PARAMETERS_CHECK
+            RESPONSE_PARAMETERS_PREVIEW     = HTML2XML_RESPONSE_PARAMETERS_PREVIEW
+            RESPONSE_PARAMETERS_SHOWCORRECT = HTML2XML_RESPONSE_PARAMETERS_SHOWCORRECT
+        else:
+            # This means that the server_type is not valid
+            return Response(
+                    text = json.dumps(response),
+                    content_type =  "application/json",
+                    status = 200,
+                )
 
         try:
             # make 2 copies of the student_answer.
@@ -1184,10 +1146,20 @@ class WeBWorKXBlock(
             # the other for the submission usage an
             self.student_answer = request_original.json.copy()
             request = request_original.json.copy()
-            self._sanitize_request_standalone(request)
+
+            if self.current_server_settings.get("server_type") == 'html2xml':
+                # Normalize 'submit_type' to use the values which the Standalone renderer uses
+                if request['submit_type'] == "WWsubmit":
+                    request['submit_type'] = "submitAnswers"
+                elif request['submit_type'] == "preview":
+                    request['submit_type'] = "previewAnswers"
+                elif request['submit_type'] == "WWcorrectAns":
+                    request['submit_type'] = "showCorrectAnswers"
+
+            self._sanitize_request(request)
 
             self.set_problem_period()
-            response.update( self.period_button_settings() );
+            response.update( self.period_button_settings() )
 
             # TODO: Consider tranform into a match-case clause
             # after upgrading to python 3.10 and above
@@ -1196,17 +1168,16 @@ class WeBWorKXBlock(
             #====Treat Submit Answers Button request====
             if request['submit_type'] == "initialLoad":
                 request.pop('submit_type')
-                response_parameters = STANDALONE_REQUEST_PARAMETERS
+                response_parameters = REQUEST_PARAMETERS
                 request.update(response_parameters)
-                webwork_response = self.request_webwork_standalone(request)
+                webwork_response = self.request_webwork(request)
                 response['renderedHTML'] = self._problem_from_json(webwork_response)
                 if response['renderedHTML'] == 'Error':
                     response['success'] = False
                     response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
                 else:
                     response['success'] = True
-                    response.pop('message')
-                    # FIXME - add attempts message
+                    response['message'] = self.create_current_score_message()
             elif request['submit_type'] == "submitAnswers":
                 allow_submit = False
                 save_grade = False # Most cases do not save a grade / submission data
@@ -1255,12 +1226,13 @@ class WeBWorKXBlock(
 
                 if allow_submit:
                     self.student_attempts += 1
+                    response.update( self.period_button_settings() ) # The values may change due to the new attempt
                     self.set_last_submission_time()
                     self.student_answer = request.copy() # This is really too much
 
-                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CHECK
+                    response_parameters = RESPONSE_PARAMETERS_CHECK
                     request.update(response_parameters)
-                    webwork_response = self.request_webwork_standalone(request)
+                    webwork_response = self.request_webwork(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
 
                     if response['renderedHTML'] == 'Error':
@@ -1268,7 +1240,8 @@ class WeBWorKXBlock(
                         response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
                     else:
                         response['success'] = True
-                        self.submission_data_to_save = self._result_from_json_standalone(webwork_response)
+                        response['message'] = '' # currently no error
+                        self.submission_data_to_save = self._result_from_json(webwork_response)
                         scaled_ww_score = self.submission_data_to_save.get('current_submission_scaled_score',0.0)
                         response['score'] = self.create_score_message(scaled_ww_score, save_grade)
                         response['scored'] = True
@@ -1354,9 +1327,9 @@ class WeBWorKXBlock(
                         self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
                     )
                 elif self.problem_period is PPeriods.NoDue or self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueUnLocked:
-                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_PREVIEW
+                    response_parameters = RESPONSE_PARAMETERS_PREVIEW
                     request.update(response_parameters)
-                    webwork_response = self.request_webwork_standalone(request)
+                    webwork_response = self.request_webwork(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
                     # On preview we do not need to save result of the call, so we do not want to make any change to the XBlock state.
                     if response['renderedHTML'] == 'Error':
@@ -1364,15 +1337,19 @@ class WeBWorKXBlock(
                         response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
                     else:
                         response['success'] = True
-                        response['message'] = "Correct answers should be provided in the table above the question."
+                        response['message'] = "A preview of how the system understands your answers should be provided in the table above the question." + \
+                            "<br>" + self.create_current_score_message()
                 else:
                     # Bad value
                     response['success'] = False
                     response['message'] = "An error occurred"
                     raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
             elif request['submit_type'] == "showCorrectAnswers":
-                # FIX
-                if self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueLocked:
+                # self.allow_show_answer is a main XBlock level setting
+                # allow_show_correct is the locally calculated value used to determine whether the action is permitted.
+                if not self.allow_show_answers:
+                    response['message'] = "Sorry, this problem is set to forbid access to the correct answers."
+                elif self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueLocked:
                     response['message'] = (
                         "Sorry, you cannot request to see the correct answers now. Answers will become available at " +
                         self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
@@ -1384,13 +1361,13 @@ class WeBWorKXBlock(
                         allow_show_correct = True
                     if self.problem_period is PPeriods.NoDue:
                         if self.max_attempts == 0:
-                            required_to_show = 10; # in this case - we allow after required_to_show attempts - FIXME - make this configurable
+                            required_to_show = self.no_attempt_limit_required_attempts_before_show_answers
                             end_of_message = ""
                         if self.max_attempts > 0:
                             required_to_show = self.max_attempts
                             end_of_message = ( "<br>Otherwise the answers will become available at " +
                                 self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S") )
-                        if self.student_attempts > required_to_show:
+                        if self.student_attempts >= required_to_show:
                             allow_show_correct = True
                         else:
                             response['message'] = (
@@ -1405,9 +1382,9 @@ class WeBWorKXBlock(
                     response['message'] = "An error occurred"
                     raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
                 if allow_show_correct:
-                    response_parameters = STANDALONE_RESPONSE_PARAMETERS_CORRECT
+                    response_parameters = RESPONSE_PARAMETERS_SHOWCORRECT
                     request.update(response_parameters)
-                    webwork_response = self.request_webwork_standalone(request)
+                    webwork_response = self.request_webwork(request)
                     # On show correct we do not need to save result of the call, so we do not want data in self.submission_data_to_save
                     # Use self.submission_data_to_save to show that a "show correct answers" action was taken
                     self.set_last_submission_time()
@@ -1422,9 +1399,10 @@ class WeBWorKXBlock(
                         response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
                         self.submission_data_to_save.update({"action_failed" : "error occurred"})
                     else:
-                        # FIXME - mark a flag that show correct was used.
+                        self.student_viewed_correct_answers = True
                         response['success'] = True
-                        response['message'] = "Correct answers should be provided in the table above the question."
+                        response['message'] = "Correct answers should be provided in the table above the question." + \
+                            "<br>" + self.create_current_score_message()
                         self.submission_data_to_save.update({"action_success" : "answers being displayed to the student"})
             else:
                 response['success'] = False
@@ -1433,9 +1411,6 @@ class WeBWorKXBlock(
 
         except WeBWorKXBlockError as e:
             response['message'] = "fixme" # e.message
-
-        # FIXME - we do NOT want all that data in the response. Comment out.
-        #response["data"] = json.dumps( data_to_save )
 
         return Response(
                 text = json.dumps(response),
@@ -1474,6 +1449,7 @@ class WeBWorKXBlock(
         return fragment
 
     # ----------- Extras -----------
+# FIXME - this is very out of date, and probably will now work
     @staticmethod
     def workbench_scenarios():
         """
@@ -1486,6 +1462,6 @@ class WeBWorKXBlock(
             ("WeBWorKXBlock With Parameters",
              """<webwork display_name="Tester test"
              problem="Technion/LinAlg/InvMatrix/en/3x3_seq01_calc_invA.pg"
-             max_allowed_score="100" max_attempts="1" show_answers="True"/>
+             max_allowed_score="100" max_attempts="1" allow_show_answers="True"/>
              """),
         ]

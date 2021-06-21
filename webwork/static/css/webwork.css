@@ -1,13 +1,7 @@
 /* CSS for WeBWorKXBlock */
 
-.webwork_block .count {
-    font-weight: bold;
-}
 
-.webwork_block p {
-    cursor: pointer;
-}
-
-.webwork_block #footer {
-	display: none;
+div.webwork_block {
+    border:2px solid black;
+    padding: 4px;
 }
