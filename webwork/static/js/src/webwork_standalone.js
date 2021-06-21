@@ -5,13 +5,19 @@ function WeBWorKXBlockStandalone(runtime, element, initdata) {
     var handlerUrl = runtime.handlerUrl(element, 'submit_webwork_standalone');
 
     console.log( "I was sent rpID ", initdata.rpID );
+    console.log( "I was sent messDivID ", initdata.messageDivID );
+    console.log( "I was sent resultDivID ", initdata.resultDivID );
+
     console.log( "handlerUrl is ",   handlerUrl );
 
     let problemiframe = document.getElementById( initdata.rpID );
+    let messageDiv    = document.getElementById( initdata.messageDivID );
+    let resultDiv     = document.getElementById( initdata.resultDivID );
 
     function handleResponse(result) {
-        $("#edx_message").html("");
-        $("#edx_webwork_result").html("");
+        messageDiv.innerHTML = "";
+        resultDiv.innerHTML  = "";
+
         if (result.success){
 	    problemiframe.srcdoc = result.renderedHTML;
 /* FIXME
@@ -19,15 +25,15 @@ function WeBWorKXBlockStandalone(runtime, element, initdata) {
 */
 
             if (result.scored) {
-                $("#edx_message").html("You scored " + result.score + "%.")
+                resultDiv.innerHTML = result.score;
             }
         } else {
-            $("#edx_message").html(result.message)
+            messageDiv.innerHTML = result.message;
         }
     }
 
     problemiframe.addEventListener('load', () =>{
-	console.log('loaded...');
+	console.log('loaded...' + initdata.rpID);
 	activeButton();
 	insertListener();
     })
