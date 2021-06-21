@@ -402,15 +402,15 @@ class WeBWorKXBlock(
         if self.settings_type == 1:
             # Use the course-wide settings for the relevant ww_server_id
             self.current_server_settings.update(self.main_settings.get('server_settings',{}).get(self.ww_server_id, {}))
-# FIXME - should be able to delete
-#            if self.current_server_settings.get("server_type","") == 'standalone':
-#                self.current_server_settings.update({"server_static_files_url":None}) # Not used by standalone
+            # Keep auth_data outside the current_server_settings field (which gets into the DB records of user_state/submissions).
+            self.current_server_settings.pop("auth_data")
         elif self.settings_type == 2:
             # Use the locally set values from the specific XBlock instance
             self.current_server_settings.update({  # Need str() on the first 2 to force into a final string form, and not __proxy__
                 "server_type":             str(self.ww_server_type),
-                "server_api_url":          str(self.ww_server_api_url),
-                "auth_data":               self.auth_data, # But no str() here - as it is a Dict
+                "server_api_url":          str(self.ww_server_api_url)
+                #,
+                #"auth_data":               self.auth_data, # But no str() here - as it is a Dict
             })
             if self.ww_server_type == "html2ml":
                 self.current_server_settings.update({
@@ -418,6 +418,14 @@ class WeBWorKXBlock(
                 })
         myST = self.current_server_settings.get("server_type","")
         logger.info("At end of set_current_server_settings for {UID} and see server_type as {ST}".format(UID=self.unique_id, ST = myST ))
+
+    def get_current_auth_data(self):
+        if self.settings_type == 1:
+            # Use the course-wide settings for the relevant ww_server_id
+            return self.main_settings.get('server_settings',{}).get(self.ww_server_id, {}).get('auth_data',{}).copy()
+        elif self.settings_type == 2:
+            # Use the locally set values from the specific XBlock instance
+            return self.auth_data.copy()
 
     def set_ww_server_id_options(self):
         """
@@ -867,7 +875,7 @@ class WeBWorKXBlock(
         # html2xml uses HTTP GET
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
         my_url = self.current_server_settings.get("server_api_url")
-        my_auth_data = self.current_server_settings.get("auth_data",{})
+        my_auth_data = self.get_current_auth_data()
         if my_url:
             my_res = requests.get(my_url, params=dict(
                     params,
@@ -1333,7 +1341,7 @@ class WeBWorKXBlock(
                         response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
                     else:
                         response['success'] = True
-                        response['message'] = "Correct answers should be provided in the table above the question."
+                        response['message'] = "A preview of how the system understands your answers should be provided in the table above the question."
                 else:
                     # Bad value
                     response['success'] = False
