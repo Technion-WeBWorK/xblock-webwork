@@ -16,6 +16,13 @@ using either
     Effort was made to credit inclusions of snippets of code from other
     open source projects where such use was made.
 
+    The initial framework of this file and several other files in the project
+    were based on the samples files from the edX XBlock SDK (https://github.com/edx/xblock-sdk)
+    which is under the Apache-2.0 License,  and the documentation in the
+    Open edX XBlock Tutorial (https://edx.readthedocs.io/projects/xblock-tutorial/en/latest/index.html)
+    which is licensed under a Creative Commons Attribution-ShareAlike 4.0 International License.
+
+
     The project is being released under an open source license, see the
     LICENSE file in the repository.
 
@@ -50,39 +57,77 @@ from xmodule.util.duedate import get_extended_due_date
 
 # Lines to allow logging to console.
 # Copied from https://gitlab.edvsz.hs-osnabrueck.de/lhannigb/showblock/-/blob/master/showblock/showblock.py
-import logging
-DEBUGLVL = logging.INFO
-logger = logging.getLogger(__name__)
-logger.setLevel(DEBUGLVL)
-ch = logging.StreamHandler()
-ch.setLevel(DEBUGLVL)
-logger.addHandler(ch)
+
+#import logging
+#DEBUGLVL = logging.INFO
+#logger = logging.getLogger(__name__)
+#logger.setLevel(DEBUGLVL)
+#ch = logging.StreamHandler()
+#ch.setLevel(DEBUGLVL)
+#logger.addHandler(ch)
+
 # End lines copied from https://gitlab.edvsz.hs-osnabrueck.de/lhannigb/showblock/-/blob/master/showblock/showblock.py
 
+# When those lines are active, we can issue log messages using logger.info("Message")
 
 # =========================================================================================
 
 # Prepare the dictionaries which are used to set up and to sanitize request data
 
+EARLY_FORM_CLEANUP = {
+    # from html2xml:
+    "courseID": "",
+    "userID": "",
+    "session_key": "",
+    "courseName": "",
+    "course_password": "",
+    "forcePortNumber": "",
+    "displayMode": "",
+    "outputformat": "",
+    "theme": "",
+    "showAnswerNumbers": "",
+    "showCheckAnswersButton": "",
+    "showCorrectAnswersButton": "",
+    "showPreviewButton": "",
+    "problemSource": "",
+    "showFooter": "",
+    "extra_header_text": "",
+    "problem-result-score": "",
+    # from Standalone:
+    "problemSource": "",
+    "problemSourceURL": "",
+    "baseURL": "",
+    "user": "",
+    "effectiveUser": "",
+    "format": "",
+    "includeTags": "",
+    "outputFormat": "",
+    "permissionLevel": "",
+    "showComments": ""
+}
+
+# Form values which should always be cleared (code sets what it needs)
 HTML2XML_JUST_REMOVE = {
-    "send_pg_flags": "1"
+    "send_pg_flags": "1",
+    "problemSeed": "",
+    "psvn": ""
 }
 
 HTML2XML_PARAMETERS = {
-    "language": "en",
+    "language": "en", # This is intended to request that WeBWorK generate messages in the requested language
+                      # and is well supported by the html2xml interface, so long as the main project translation
+                      # file has a translation for the relevant string.
     "displayMode": "MathJax",
     "outputformat": "simple",
+    "showFooter": "0",
     "standalone_style": "1"
 }
 
-# FIXME  - allow update of answersSubmitted according to user history
 HTML2XML_REQUEST_PARAMETERS = dict(HTML2XML_PARAMETERS, **{
     "answersSubmitted": "0"
 })
 
-# FIXME  - Increase by 1 from current answersSubmitted
 HTML2XML_RESPONSE_PARAMETERS_BASE = dict(HTML2XML_PARAMETERS, **{
-    #"psvn" : "54321",  # Does not seem to belong here
     "showSummary" : "1",
     "answersSubmitted": "1"
 })
@@ -99,26 +144,54 @@ HTML2XML_RESPONSE_PARAMETERS_SHOWCORRECT = dict(HTML2XML_RESPONSE_PARAMETERS_BAS
     "WWcorrectAns": "Show Correct Answers"
 })
 
+# Form values which should always be cleared.
+# Any form provided values may be due to hidden fields set by the WeBWorK renderer in use,
+# and should never be trusted. We set those we need when building a request.
+# List based on the API description from the README at
+#    https://github.com/drdrew42/renderer/blob/master/README.md
+# The JWT releated fields are not yet documented there, but as the XBlock acts as a
+# man in the middle - any JWT fields would be handled only by the XBlock without any need
+# to be trusted from the end-user submission.
+#   JWT fields appear in the Standalone code in
+#    https://github.com/drdrew42/renderer/blob/master/lib/RenderApp/Controller/Render.pm
+#    https://github.com/drdrew42/renderer/blob/master/lib/RenderApp/Controller/RenderProblem.pm
+# Anything which will be cleared by the other dictionaries need not be included in this one.
 STANDALONE_JUST_REMOVE = {
+    "problemSourceURL": "",
+    "problemSource": "",
+    "sourceFilePath": "",
+    "problemSeed": "",
+    "psvn": "",
+    "formURL": "",
+    "baseURL": "",
+    "problemNumber": "",
+    "numCorrect": "",
+    "numIncorrect": "",
+    "problemJWT": "",
+    "sessionJWT": "",
+    "answerJWT": "",
+    "JWTanswerURL": "",
 }
 
 STANDALONE_PARAMETERS = {
-    "language": "en",
-    "displayMode": "MathJax",
     "format" : "json",
     "outputFormat": "simple",
+    "displayMode": "MathJax",
+    "permissionLevel": "0", # Student level permissions
+    "processAnswers": "1", # Standalone enables this by default, but as we depend on it - set it on explicitly
     "showSummary": "1",
-    "permissionLevel": "0"
+    "showComments": "0",
+    "showHints": "0", # Default to off
+    "showSolutions": "0", # Default to off
+    "includeTags": "0",
+    "language": "en", # This is intended to request that WeBWorK generate messages in the requested language and is not yet fully supported by the Standalone renderer
 }
 
-# FIXME  - allow update of answersSubmitted according to user history
 STANDALONE_REQUEST_PARAMETERS = dict(STANDALONE_PARAMETERS, **{
     "answersSubmitted": "0"
 })
 
-# FIXME  - Increase by 1 from current answersSubmitted
 STANDALONE_RESPONSE_PARAMETERS_BASE = dict(STANDALONE_PARAMETERS, **{
-    #"psvn" : "54321",  # Does not seem to belong here
     "showSummary" : "1",
     "answersSubmitted": "1"
 })
@@ -160,7 +233,9 @@ ANSWER_FIELDS_TO_SAVE = [
 STANDALONE_FORM_SETTINGS_TO_SAVE = [
   'problemSeed',
   'psvn',
-  'sourceFilePath'
+  'sourceFilePath',
+  'numCorrect',
+  'numIncorrect'
 ]
 
 HTML2XML_FORM_SETTINGS_TO_SAVE = [
@@ -328,8 +403,6 @@ class WeBWorKXBlock(
     show_in_read_only_mode = True # Allows staff to view the problem in read only mode when masquerading as a user.
     # See https://github.com/edx/edx-platform/blob/master/lms/djangoapps/courseware/masquerade.py
 
-
-# FIXME
     main_settings = None
     def reload_main_setting(self):
         self.main_settings = self.course.other_course_settings.get('webwork_settings', {})
@@ -370,9 +443,7 @@ class WeBWorKXBlock(
             self.current_server_settings.update({  # Need str() on the first 2 to force into a final string form, and not __proxy__
                 "server_type":             str(self.ww_server_type),
                 "server_api_url":          str(self.ww_server_api_url)
-                #,
-                #"auth_data":               self.auth_data, # But no str() here - as it is a Dict
-            })
+            }) # The auth_data is not provided in this dictionary
             if self.ww_server_type == "html2ml":
                 self.current_server_settings.update({
                     "server_static_files_url": str(self.ww_server_static_files_url)
@@ -387,10 +458,10 @@ class WeBWorKXBlock(
     def get_current_auth_data(self):
         if self.settings_type == 1:
             # Use the course-wide settings for the relevant ww_server_id
-            return self.main_settings.get('server_settings',{}).get(self.ww_server_id, {}).get('auth_data',{}) # FIXME do we need .copy()
+            return self.main_settings.get('server_settings',{}).get(self.ww_server_id, {}).get('auth_data',{})
         elif self.settings_type == 2:
             # Use the locally set values from the specific XBlock instance
-            return self.auth_data # FIXME do we need .copy()
+            return self.auth_data
 
     def set_ww_server_id_options(self):
         """
@@ -421,11 +492,13 @@ class WeBWorKXBlock(
         'ww_server_type', 'ww_server_api_url', 'ww_server_static_files_url', 'auth_data',
         # Main problem settings
         'problem', 'max_allowed_score',
+        'ww_language',
         'max_attempts', 'no_attempt_limit_required_attempts_before_show_answers',
         'weight', 'psvn_key',
         # Less important settings
         'allow_show_answers',
-        'problem_banner_text', 'webwork_request_timeout',
+        'problem_banner_text', 'display_name',
+        'webwork_request_timeout',
         'post_deadline_lockdown',
         'iframe_min_height', 'iframe_max_height', 'iframe_min_width'
         )
@@ -467,22 +540,42 @@ class WeBWorKXBlock(
 
     ww_server_api_url = String(
        display_name = _("WeBWorK server address with API endpoint"),
-       # FIXME - this should depend on a main course setting
        scope = Scope.settings,
        help=_("This is the full URL of the webwork server including the path to the html2xml or render-api endpoint."),
     )
 
     ww_server_static_files_url = String(
        display_name = _("WeBWorK server address with path for static files"),
-       # FIXME - this should depend on a main course setting
        scope = Scope.settings,
-       help=_("This is the URL of the path to static files on the webwork server."),
+       help=_("This is the URL of the path to static files on the webwork server. Needed for html2xml servers."),
     )
 
     auth_data = Dict(
        display_name = _("Authentication settings for the server"),
        scope = Scope.settings,
-       help=_("This is the authentication data needed to interface with the server. Required fields depend on the servert type."),
+       help=_("This is the authentication data needed to interface with the server. Required fields depend on the server type."),
+    )
+
+    # This is a standard Field used in many XBlocks and the value set appears in the studio view
+    # in the banner line where the edit button appears. I am not certain why the standard help
+    # text refers to "the horizontal navigation at the top of the page."
+    # Among many places it appears in Google Drive XBlock
+    # https://github.com/edx-solutions/xblock-google-drive/blob/master/google_drive/google_calendar.py
+    # which is licensed under AGPL-3.0 License
+    # and in an image of the studio edit for that XBlock in the sample image in the page
+    # at https://edx.readthedocs.io/projects/xblock-tutorial/en/latest/overview/examples.html
+    # It also appears in
+    # https://github.com/edx/edx-platform/blob/a6bae4d238fdc6a60c8ee9f1b80ca3512bb085eb/common/lib/xmodule/xmodule/capa_base.py
+    # https://github.com/edx/edx-platform/blob/b6ea3f4e692909f71cf251edc4a946138533fef9/common/lib/xmodule/xmodule/capa_base.py
+    # and the standard help message (before the i8n support seems to date back to
+    # https://github.com/edx/edx-platform/commit/b6ea3f4e692909f71cf251edc4a946138533fef9)
+    # https://github.com/edx/edx-platform/blob/831f907c799917ab5fff4661111f7a52f9863be5/common/lib/xmodule/xmodule/capa_module.py
+    display_name = String(
+       display_name = _("Display Name"),
+       default = _("WeBWorK Problem"),
+       scope = Scope.settings,
+       help = _("Display name which appears in the control bar above the content in Studio view.") # Where else?
+       #help=_("This name appears in the horizontal navigation at the top of the page."),
     )
 
     problem_banner_text = String(
@@ -497,6 +590,13 @@ class WeBWorKXBlock(
         default = "Library/Dartmouth/setMTWCh2S4/problem_5.pg",
         scope = Scope.settings, # settings, so a course can modify, if needed, and not only Studio
         help = _("The path to load the problem from."),
+    )
+
+    ww_language = String(
+        display_name = _("WeBWorK main language"),
+        default = "en",
+        scope = Scope.settings, # settings, so a course can modify, if needed, and not only Studio
+        help = _("The name of the language translation file to use to select the language in which standard strings should be provided.")
     )
 
     max_allowed_score = Float(
@@ -534,10 +634,10 @@ class WeBWorKXBlock(
         help = _("Allow students to view correct answers (after deadline or if no deadline after all attempts used / or required number of attempts used when there is no attempt limit.)?"),
     )
 
-    custom_parameters = List(
-        # FIXME - for future use
+    custom_parameters = Dict(
+        # Note: This is in place for future use, and is intended to be added to the request data.
         display_name=_("Custom Parameters"),
-        help=_("Add the key/value pair for any custom parameters. Ex. [\"setting1=71\", \"setting2=white\"]"),
+        help=_("Add the key/value pair for any custom parameters as a JSON object. Ex. {\"setting1\":71, \"setting2\": \"white\"}"),
         scope=Scope.settings
     )
 
@@ -588,6 +688,18 @@ class WeBWorKXBlock(
         default = 0,
         scope = Scope.user_state,
         help = _("Number of times student has submitted problem"),
+    )
+
+    ww_numCorrect = Integer(
+        default = 0,
+        scope = Scope.user_state,
+        help = _("Number of (fully) correct submissions processed in the past (while the problem is for credit). WeBWorK uses this field in internal calculations, and the Standalone renderer accepts a value to be used in procssing."),
+    )
+
+    ww_numIncorrect = Integer(
+        default = 0,
+        scope = Scope.user_state,
+        help = _("Number of incorrect submissions processed in the past  (while the problem is for credit). WeBWorK uses this field in internal calculations, and the Standalone renderer accepts a value to be used in procssing."),
     )
 
     seed = Integer(
@@ -799,7 +911,9 @@ class WeBWorKXBlock(
             'provided_settings': {
                 'problemSeed': str(self.seed),
                 'psvn': str(self.get_psvn()),
-                'sourceFilePath': str(self.problem)
+                'sourceFilePath': str(self.problem),
+                "numCorrect":   str(self.ww_numCorrect),
+                "numIncorrect": str(self.ww_numIncorrect)
             },
             'submission_settings_processed': submission_settings,
             'answers_processed': answers_submitted,
@@ -844,6 +958,11 @@ class WeBWorKXBlock(
             self._sanitize_request_standalone(request)
         elif self.current_server_settings.get("server_type") == 'html2xml':
             self._sanitize_request_html2xml(request)
+
+    @staticmethod
+    def _sanitize_early_form_data(request):
+        for key in EARLY_FORM_CLEANUP:
+            request.pop(key, None)
 
     def request_webwork_html2xml(self, params):
         # html2xml uses HTTP GET
@@ -964,9 +1083,8 @@ class WeBWorKXBlock(
 #            self.graceperiod = None
 
     # ----------- View -----------
-    # FIXME
-    def student_view(self, context=None, show_detailed_errors=True):
-    #def student_view(self, context=None, show_detailed_errors=False):
+    #def student_view(self, context=None, show_detailed_errors=True):
+    def student_view(self, context=None, show_detailed_errors=False):
         """
         The primary view of the XBlock, shown to students
         when viewing courses. (iFramed: standalone or html2xml)
@@ -983,9 +1101,6 @@ class WeBWorKXBlock(
         if not self.seed:
             self.seed = random.randint(1,2**31-1)
 
-        # FIXME hide the show answers button when necessary
-        # FIXME - the standalone renderer should do this or JS code
-
         html_settings = 'lang=\"{}\" dir=\"{}\"'.format("en","ltr")
         loading1 = "Your problem should load soon."
         loading2 = "Please wait."
@@ -993,19 +1108,19 @@ class WeBWorKXBlock(
         mysrcdoc = loadingHtml.format(html_settings = html_settings,
             loading1 = loading1, loading2 = loading2 )
 
-        debug_data1 = self.current_server_settings.copy()
-        debug_data1.update({
-            "settings_type": self.settings_type,
-            "psvn_options_": self.psvn_options,
-            "psvn":self.get_psvn(),
-            "unique_id":str(self.unique_id),
-        })
-        try:
-            debug_data = json.dumps(debug_data1,skipkeys=True)
-        except TypeError:
-            debug_data = "error"
-
-        # FIXME Make option to disable debug_data
+        debug_data = ""
+        # This is sample code to generate some debug info to display under the problem
+        #debug_data1 = self.current_server_settings.copy()
+        #debug_data1.update({
+        #    "settings_type": self.settings_type,
+        #    "psvn_options_": self.psvn_options,
+        #    "psvn":self.get_psvn(),
+        #    "unique_id":str(self.unique_id),
+        #})
+        #try:
+        #    debug_data = json.dumps(debug_data1,skipkeys=True)
+        #except TypeError:
+        #    debug_data = "error"
 
         iframe_id = 'rendered-problem-' + self.unique_id;
         iframe_resize_init = \
@@ -1141,10 +1256,8 @@ class WeBWorKXBlock(
                 )
 
         try:
-            # make 2 copies of the student_answer.
-            # 1. For future reference and documentation and
-            # the other for the submission usage an
-            self.student_answer = request_original.json.copy()
+            # Copy the submitted form data from the request_original.json element
+            # for modification and future use.
             request = request_original.json.copy()
 
             if self.current_server_settings.get("server_type") == 'html2xml':
@@ -1164,12 +1277,22 @@ class WeBWorKXBlock(
             # TODO: Consider tranform into a match-case clause
             # after upgrading to python 3.10 and above
 
+            # For most values of submit_type We do not modify self.student_answer,
+            # so no state update should occur, which would trigger a save() of the XBlock,
+            # and waste space in the database.
+
             # Handle first by submission type to reduce code duplication
             #====Treat Submit Answers Button request====
             if request['submit_type'] == "initialLoad":
                 request.pop('submit_type')
                 response_parameters = REQUEST_PARAMETERS
                 request.update(response_parameters)
+                request.update( { "language": str(self.ww_language) } ) # Sets the desired translation language on the WW side
+                if self.current_server_settings.get("server_type") == 'standalone': # Supported only by the Standalone renderer at present
+                    request.update( {
+                        "numCorrect":   str(self.ww_numCorrect),
+                        "numIncorrect": str(self.ww_numIncorrect),
+                    } )
                 webwork_response = self.request_webwork(request)
                 response['renderedHTML'] = self._problem_from_json(webwork_response)
                 if response['renderedHTML'] == 'Error':
@@ -1179,6 +1302,8 @@ class WeBWorKXBlock(
                     response['success'] = True
                     response['message'] = self.create_current_score_message()
             elif request['submit_type'] == "submitAnswers":
+                # We will only modify self.student_answer only once we are certain that a submission is
+                # allowed, to avoid an unnecessary state update which would waste space in the database.
                 allow_submit = False
                 save_grade = False # Most cases do not save a grade / submission data
                 block_reason_message = None
@@ -1225,29 +1350,60 @@ class WeBWorKXBlock(
                     raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
 
                 if allow_submit:
-                    self.student_attempts += 1
-                    response.update( self.period_button_settings() ) # The values may change due to the new attempt
-                    self.set_last_submission_time()
-                    self.student_answer = request.copy() # This is really too much
+                    # This is a real submission, save the original submission data as an initial value of the submission.
+                    self.student_answer = request.copy()                  # Start from the current request data and then clean it up
+                    self._sanitize_early_form_data( self.student_answer ) # a bit more, in case an error occurs and this is what is saved.
+                                                                          # If we get to the next "else" then elf._result_from_json(webwork_response)
+                                                                          # will replace this with properly selected data.
 
                     response_parameters = RESPONSE_PARAMETERS_CHECK
                     request.update(response_parameters)
+                    request.update( { "language": str(self.ww_language) } ) # Sets the desired translation language on the WW side
+
+                    if self.current_server_settings.get("server_type") == 'standalone': # Supported only by the Standalone renderer at present
+                        request.update( {
+                            "numCorrect":   str(self.ww_numCorrect),
+                            "numIncorrect": str(self.ww_numIncorrect),
+                        } )
+
                     webwork_response = self.request_webwork(request)
+
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
 
                     if response['renderedHTML'] == 'Error':
+                        # If we have an error, we will not increase the attempts counter.
+                        response.update( self.period_button_settings() ) # The values may have changed since the last render
                         response['success'] = False
                         response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
                     else:
                         response['success'] = True
                         response['message'] = '' # currently no error
+
+                        # Grading apparently succeeded, so an attempt is counted.
+                        self.student_attempts += 1
+
+                        response.update( self.period_button_settings() ) # The values may change due to the new attempt
+
+                        self.set_last_submission_time()
+
                         self.submission_data_to_save = self._result_from_json(webwork_response)
+
+                        raw_ww_score = self.submission_data_to_save.get('current_submission_ww_raw_score',0.0)
                         scaled_ww_score = self.submission_data_to_save.get('current_submission_scaled_score',0.0)
+
                         response['score'] = self.create_score_message(scaled_ww_score, save_grade)
                         response['scored'] = True
+
                         if message_when_allowed:
                             response['message'] = message_when_allowed
                         if save_grade:
+
+                            # If we are allowed to save a grade, then the WW style attempt counters must be update
+                            if raw_ww_score == 1.0:
+                                self.ww_numCorrect += 1
+                            else:
+                                self.ww_numIncorrect += 1
+
                             # Records of all submissions will be created in edxapp_csmh.coursewarehistoryextended_studentmodulehistoryextended
                             # if the appropriate changes are made so the "webwork" xblock can save to their in addition to
                             # the default "problem" block.
@@ -1320,7 +1476,8 @@ class WeBWorKXBlock(
                     if block_reason_message:
                         response['message'] = block_reason_message
             elif request['submit_type'] == "previewAnswers":
-                # FIX
+                # We do not modify self.student_answer, so no state update should occur,
+                # which would trigger a save() of the XBlock, and waste space in the database.
                 if self.problem_period is PPeriods.PostDueLocked:
                     response['message'] = (
                         "Sorry, you cannot preview answers now. Use of this problem is not permitted until " +
@@ -1329,6 +1486,12 @@ class WeBWorKXBlock(
                 elif self.problem_period is PPeriods.NoDue or self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueUnLocked:
                     response_parameters = RESPONSE_PARAMETERS_PREVIEW
                     request.update(response_parameters)
+                    request.update( { "language": str(self.ww_language) } ) # Sets the desired translation language on the WW side
+                    if self.current_server_settings.get("server_type") == 'standalone': # Supported only by the Standalone renderer at present
+                        request.update( {
+                            "numCorrect":   str(self.ww_numCorrect),
+                            "numIncorrect": str(self.ww_numIncorrect),
+                        } )
                     webwork_response = self.request_webwork(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
                     # On preview we do not need to save result of the call, so we do not want to make any change to the XBlock state.
@@ -1345,8 +1508,11 @@ class WeBWorKXBlock(
                     response['message'] = "An error occurred"
                     raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
             elif request['submit_type'] == "showCorrectAnswers":
-                # self.allow_show_answer is a main XBlock level setting
-                # allow_show_correct is the locally calculated value used to determine whether the action is permitted.
+                # We usually do not modify self.student_answer, so no state update should occur,
+                # which would trigger a save() of the XBlock, and waste space in the database.
+
+                # Note: self.allow_show_answer is a main XBlock level setting
+                #       allow_show_correct is the locally calculated value used to determine whether the action is permitted.
                 if not self.allow_show_answers:
                     response['message'] = "Sorry, this problem is set to forbid access to the correct answers."
                 elif self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueLocked:
@@ -1384,26 +1550,32 @@ class WeBWorKXBlock(
                 if allow_show_correct:
                     response_parameters = RESPONSE_PARAMETERS_SHOWCORRECT
                     request.update(response_parameters)
+                    request.update( { "language": str(self.ww_language) } ) # Sets the desired translation language on the WW side
+                    if self.current_server_settings.get("server_type") == 'standalone': # Supported only by the Standalone renderer at present
+                        request.update( {
+                            "numCorrect":   str(self.ww_numCorrect),
+                            "numIncorrect": str(self.ww_numIncorrect),
+                        } )
                     webwork_response = self.request_webwork(request)
-                    # On show correct we do not need to save result of the call, so we do not want data in self.submission_data_to_save
-                    # Use self.submission_data_to_save to show that a "show correct answers" action was taken
-                    self.set_last_submission_time()
-                    self.submission_data_to_save.clear()
-                    self.submission_data_to_save.update({
-                        "action" : "show correct answers",
-                        'last_submission_time': str(self.last_submission_time)
-                    })
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
                     if response['renderedHTML'] == 'Error':
                         response['success'] = False
                         response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
-                        self.submission_data_to_save.update({"action_failed" : "error occurred"})
                     else:
+                        # On show correct we do not need to save result of the call, or the student_answer data,
+                        # so we clear the relevant fields, and on the first use only, just save a record showing that show answers was used.
+                        # Use self.submission_data_to_save to show that a "show correct answers" action was taken, but ONLY the first time.
+                        if not self.student_viewed_correct_answers:
+                            self.set_last_submission_time()
+                            self.student_answer.clear()
+                            self.submission_data_to_save = {
+                                "action" : "show correct answers - called for the first time when permitted",
+                                'last_submission_time': str(self.last_submission_time)
+                            }
                         self.student_viewed_correct_answers = True
                         response['success'] = True
                         response['message'] = "Correct answers should be provided in the table above the question." + \
                             "<br>" + self.create_current_score_message()
-                        self.submission_data_to_save.update({"action_success" : "answers being displayed to the student"})
             else:
                 response['success'] = False
                 response['message'] = "An error occurred - invalid submission type"
@@ -1447,21 +1619,4 @@ class WeBWorKXBlock(
         fragment.initialize_js('WebWorkXBlockInitStudio')
 
         return fragment
-
-    # ----------- Extras -----------
-# FIXME - this is very out of date, and probably will now work
-    @staticmethod
-    def workbench_scenarios():
-        """
-        A canned scenario for display in the workbench.
-        """
-        return [
-            ("WeBWorKXBlock",
-             """<webwork/>
-             """),
-            ("WeBWorKXBlock With Parameters",
-             """<webwork display_name="Tester test"
-             problem="Technion/LinAlg/InvMatrix/en/3x3_seq01_calc_invA.pg"
-             max_allowed_score="100" max_attempts="1" allow_show_answers="True"/>
-             """),
-        ]
+        
