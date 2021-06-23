@@ -89,13 +89,21 @@ EARLY_FORM_CLEANUP = {
     "outputformat": "",
     "theme": "",
     "showAnswerNumbers": "",
-    "showCheckAnswersButton": "",
-    "showCorrectAnswersButton": "",
-    "showPreviewButton": "",
+    "showCheckAnswersButton": "",    # The XBlock will disable buttons when they should not be used.
+    "showCorrectAnswersButton": "",  # We do not hide/remove them, but prevent processing a request
+    "showPreviewButton": "",         # made if the button is reenabled or the relevant type of submission
+    "showCheckAnswersButton" : "",   # is made and it is not allowed. (These are html2xml options.)
     "problemSource": "",
     "showFooter": "",
     "extra_header_text": "",
     "problem-result-score": "",
+    "WWcheck": "", # used by html2xml for "check" as opposed to submit. We treat all as "submit" in the XBlock
+                   # and decide on when to save a grade internally.
+    "clientDebug": "",
+    "lis_outcome_service_url": "",
+    "oauth_consumer_key": "",
+    "oauth_signature_method": "",
+    "lis_result_sourcedid": "",
     # from Standalone:
     "problemSource": "",
     "problemSourceURL": "",
@@ -113,7 +121,30 @@ EARLY_FORM_CLEANUP = {
 HTML2XML_JUST_REMOVE = {
     "send_pg_flags": "1",
     "problemSeed": "",
-    "psvn": ""
+    "psvn": "",
+# Added now
+    "courseID": "",
+    "userID": "",
+    "session_key": "",
+    "courseName": "",
+    "course_password": "",
+    "forcePortNumber": "",
+    "theme": "",
+    "showAnswerNumbers": "",
+    "showCheckAnswersButton": "",    # The XBlock will disable buttons when they should not be used.
+    "showCorrectAnswersButton": "",  # We do not hide/remove them, but prevent processing a request
+    "showPreviewButton": "",         # made if the button is reenabled or the relevant type of submission
+    "showCheckAnswersButton" : "",   # is made and it is not allowed. (These are html2xml options.)
+    "problemSource": "",
+    "extra_header_text": "",
+    "problem-result-score": "",
+    "WWcheck": "", # used by html2xml for "check" as opposed to submit. We treat all as "submit" in the XBlock
+               # and decide on when to save a grade internally.
+    "clientDebug": "",
+    "lis_outcome_service_url": "",
+    "oauth_consumer_key": "",
+    "oauth_signature_method": "",
+    "lis_result_sourcedid": ""
 }
 
 HTML2XML_PARAMETERS = {
