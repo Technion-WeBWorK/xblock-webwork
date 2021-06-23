@@ -331,9 +331,18 @@ class WeBWorKXBlock(
         """ Return course by course id."""
         return self.runtime.modulestore.get_course(self.runtime.course_id)
 
+    def final_max_attempts(self):
+        if self.max_attempts > 0:
+            return self.max_attempts + self.student_extra_attempts
+        elif self.max_attempts == 0:
+            # Do not modify
+            return 0
+        else:
+            # Should not occur, but just in case:
+            return 0
+
     def set_due_date(self):
         self.due = get_extended_due_date(self)
-
 
     @property
     def grace_timedelta(self): #plays both as getter and setter
@@ -391,19 +400,19 @@ class WeBWorKXBlock(
             'hideSubmit': False
         }
         if self.problem_period is PPeriods.NoDue:
-            if self.max_attempts > 0 and self.student_attempts < self.max_attempts:
+            if self.final_max_attempts() > 0 and self.student_attempts < self.final_max_attempts():
                 # Did not submit enough attempts to be permitted to see answers
                 my_return_dict.update( {
                     'hideShowAnswers': True,
                 })
-            elif self.max_attempts == 0 and self.student_attempts < self.no_attempt_limit_required_attempts_before_show_answers:
+            elif self.final_max_attempts() == 0 and self.student_attempts < self.no_attempt_limit_required_attempts_before_show_answers:
                 # Did not submit enough attempts to be permitted to see answers
                 my_return_dict.update( {
                     'hideShowAnswers': True,
                 })
         elif self.problem_period is PPeriods.PreDue:
-            if self.max_attempts > 0:
-                if self.student_attempts >= self.max_attempts:
+            if self.final_max_attempts() > 0:
+                if self.student_attempts >= self.final_max_attempts():
                     # Used all allowed pre-deadline submission. Disable all buttons.
                     my_return_dict.update( {
                         'hideShowAnswers': True,
@@ -415,7 +424,7 @@ class WeBWorKXBlock(
                     my_return_dict.update( {
                         'hideShowAnswers': True,
                     })
-            elif self.max_attempts == 0 and self.student_attempts < self.no_attempt_limit_required_attempts_before_show_answers:
+            elif self.final_max_attempts() == 0 and self.student_attempts < self.no_attempt_limit_required_attempts_before_show_answers:
                 # Only prevent use of Show Answers
                 my_return_dict.update( {
                     'hideShowAnswers': True,
@@ -744,6 +753,13 @@ class WeBWorKXBlock(
         default = 0,
         scope = Scope.user_state,
         help = _("Number of times the student has submitted this problem. Simple counter."),
+    )
+
+    # FIXME - we do not yet have a mechanism to edit this
+    student_extra_attempts = Integer(
+        default = 0,
+        scope = Scope.user_state,
+        help = _("Additional number of attempts granted by the staff to this user."),
     )
 
     ww_numCorrect = Integer(
@@ -1280,10 +1296,10 @@ class WeBWorKXBlock(
         else:
             attempts_message1 = "You have not yet made a graded submission to this problem."
 
-        if self.max_attempts > 0:
+        if self.final_max_attempts() > 0:
             attempts_message2 = "You are allowed at most {max_attempts} graded submissions to this problem.".format(
-                max_attempts = str(self.max_attempts))
-        elif self.max_attempts == 0:
+                max_attempts = str(self.final_max_attempts()))
+        elif self.final_max_attempts() == 0:
             attempts_message2 = "You are allowed an unlimited number of graded submissions to this problem."
         return "<br>" + attempts_message1 + "<br>" + attempts_message2
 
@@ -1422,11 +1438,11 @@ class WeBWorKXBlock(
                     allow_submit = True
                     save_grade = False    
                 elif self.problem_period is PPeriods.PreDue:
-                    if self.max_attempts == 0:
+                    if self.final_max_attempts() == 0:
                         allow_submit = True
                         save_grade = True
-                    if self.max_attempts > 0:
-                        if self.student_attempts >= self.max_attempts:
+                    if self.final_max_attempts() > 0:
+                        if self.student_attempts >= self.final_max_attempts():
                             allow_submit = False
                             part1 = "Sorry, can't submit now since your made the maximum number of allowed submissions for credit."
                             if self.formatted_lock_date_end:
@@ -1438,11 +1454,11 @@ class WeBWorKXBlock(
                             allow_submit = True
                             save_grade = True
                 elif self.problem_period is PPeriods.NoDue:
-                    if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
+                    if self.final_max_attempts() > 0 and self.student_attempts >= self.final_max_attempts():
                         allow_submit = True
                         save_grade = False
                         message_when_allowed = "You have exceeded the maximum number ({max_attempts}) of graded attempts allowed on this problem.".format(
-                            max_attempts = str(self.max_attempts) ) + "<br>" + \
+                            max_attempts = str(self.final_max_attempts()) ) + "<br>" + \
                             "This and additional submissions are allowed, but your recorded grade will not be changed." + "<br>" + \
                             "You may now also use the Show Correct Answers button."
                     else:
@@ -1580,8 +1596,8 @@ class WeBWorKXBlock(
                 # which would trigger a save() of the XBlock, and waste space in the database.
                 if self.problem_period is PPeriods.PostDueLocked or (
                         self.problem_period is PPeriods.PreDue and
-                        self.max_attempts > 0 and
-                        self.student_attempts >= self.max_attempts ):
+                        self.final_max_attempts() > 0 and
+                        self.student_attempts >= self.final_max_attempts() ):
                     part1 = "Sorry, you cannot preview answers now."
                     if self.formatted_lock_date_end:
                         part2 = "<br>" + "Additional use of the problem is not permitted until {unlock_datetime}".format(unlock_datetime = self.formatted_lock_date_end)
@@ -1632,11 +1648,11 @@ class WeBWorKXBlock(
                     if self.problem_period is PPeriods.NoDue:
                         end_of_message = ""
                         required_to_show = 500 # fallback if max_attempts is negative
-                        if self.max_attempts == 0:
+                        if self.final_max_attempts() == 0:
                             required_to_show = self.no_attempt_limit_required_attempts_before_show_answers
-                        if self.max_attempts > 0:
-                            required_to_show = self.max_attempts
-                        if self.max_attempts >= 0:
+                        if self.final_max_attempts() > 0:
+                            required_to_show = self.final_max_attempts()
+                        if self.final_max_attempts() >= 0:
                             end_of_message = "<br>" + "Answers will become available after you make at {required_to_show} submissions.".format(required_to_show = required_to_show)
                         if self.student_attempts >= required_to_show:
                             allow_show_correct = True
