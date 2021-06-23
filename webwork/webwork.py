@@ -709,27 +709,27 @@ class WeBWorKXBlock(
     iframe_min_height = Integer(
         display_name=_("Iframe Minimum Height"),
         help=_(
-            "Enter the desired minimum pixel height of the iframe which will contain the problem. "
+            "Enter the desired minimum pixel height of the iframe which will contain the problem. (Minimum: 380)"
         ),
-        default=50,
+        default=380,
         scope=Scope.settings
     )
 
     iframe_max_height = Integer(
         display_name=_("Iframe Maximum Height"),
         help=_(
-            "Enter the desired maximum pixel height of the iframe which will contain the problem. "
+            "Enter the desired maximum pixel height of the iframe which will contain the problem. (Minimum: 380)"
         ),
-        default=500,
+        default=600,
         scope=Scope.settings
     )
 
     iframe_min_width = Integer(
         display_name=_("Iframe Minimum Width"),
         help=_(
-            "Enter the desired minimum pixel width of the iframe which will contain the problem. "
+            "Enter the desired minimum pixel width of the iframe which will contain the problem.  (Minimum: 500)"
         ),
-        default=500,
+        default=600,
         scope=Scope.settings
     )
 
@@ -908,17 +908,17 @@ class WeBWorKXBlock(
             validation.add(ValidationMessage(ValidationMessage.ERROR, str(
                 _("Post deadline lockdown (in hours) must be non-negative. Use 0 for no lock-down period.")
             )))
-        if data.iframe_min_height < 50:
+        if data.iframe_min_height < 380:
             validation.add(ValidationMessage(ValidationMessage.ERROR, str(
-                _("iframe_min_height must be at least 50 pixels.")
+                _("iframe_min_height must be at least 380 pixels.")
             )))
-        if data.iframe_max_height < 50:
+        if data.iframe_max_height < 380:
             validation.add(ValidationMessage(ValidationMessage.ERROR, str(
-                _("iframe_max_height must be at least 50 pixels.")
+                _("iframe_max_height must be at least 380 pixels.")
             )))
-        if data.iframe_min_width < 300:
+        if data.iframe_min_width < 500:
             validation.add(ValidationMessage(ValidationMessage.ERROR, str(
-                _("iframe_min_width must be at least 300 pixels.")
+                _("iframe_min_width must be at least 500 pixels.")
             )))
         if data.webwork_request_timeout < 0.5:
             validation.add(ValidationMessage(ValidationMessage.ERROR, str(
@@ -950,15 +950,15 @@ class WeBWorKXBlock(
                 # html2xml uses most URLs as relative URLs and that does not work in the
                 # iFrame. Fix the relative URLs for static files using the provided
                 # value.
-                fix_url = self.current_server_settings.get('server_static_files_url')
+                fix_url = self.current_server_settings.get('server_static_files_url', None)
                 if fix_url:
                     fixed_state = raw_state.replace("\"/webwork2_files", "\"" + fix_url )
                 else:
                     fixed_state = raw_state
-            except KeyError:
+            except Exception:
                 return 'Error'
         elif myST == 'standalone':
-            fixed_state = response_json['renderedHTML']
+            fixed_state = raw_state
         else:
             fixed_state = 'Error'
 
