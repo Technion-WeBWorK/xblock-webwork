@@ -1028,18 +1028,28 @@ class WeBWorKXBlock(
     def request_webwork_html2xml(self, params):
         # html2xml uses HTTP GET
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
+        my_timeout = max(self.webwork_request_timeout,0.5)
         my_url = self.current_server_settings.get("server_api_url")
         my_auth_data = self.get_current_auth_data()
+        my_res = None
         if my_url:
-            my_res = requests.get(my_url, params=dict(
-                    params,
-                    courseID=my_auth_data.get('ww_course','error'),
-                    userID=my_auth_data.get('ww_username','error'),
-                    course_password=my_auth_data.get('ww_password','error'),
-                    problemSeed=str(self.seed),
-                    psvn=str(self.get_psvn()),
-                    sourceFilePath=str(self.problem)
-                ))
+            try:
+                my_res = requests.get(my_url, params=dict(
+                        params,
+                        courseID=my_auth_data.get('ww_course','error'),
+                        userID=my_auth_data.get('ww_username','error'),
+                        course_password=my_auth_data.get('ww_password','error'),
+                        problemSeed=str(self.seed),
+                        psvn=str(self.get_psvn()),
+                        sourceFilePath=str(self.problem)
+                    ),
+                    timeout = my_timeout)
+            except requests.exceptions.RequestException:
+                # At present we are not trying to provide any information on what
+                # sort of exception occurred.
+                # Details on what can be issued appear in
+                # https://docs.python-requests.org/en/latest/user/quickstart/#errors-and-exceptions
+                my_res = None
         if my_res:
             return my_res.json()
         return None
@@ -1049,22 +1059,28 @@ class WeBWorKXBlock(
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
         # and outputFormat set to "simple" and format set to "json".
         # Check by examining form parameters from Rederly UI on "render" call.
-
         my_timeout = max(self.webwork_request_timeout,0.5)
-
         my_url = self.current_server_settings.get("server_api_url")
+        my_res = None
         if my_url:
-            my_res = requests.post(my_url,
-                params=dict(params,
-                    # standalone does not have course/user/password
-                    problemSeed=str(self.seed),
-                    psvn=str(self.get_psvn()),
-                    sourceFilePath=str(self.problem)
-                ),
-                timeout = my_timeout)
-            if my_res:
-                return my_res.json()
-            return None
+            try:
+                my_res = requests.post(my_url,
+                    params=dict(params,
+                        # standalone does not have course/user/password
+                        problemSeed=str(self.seed),
+                        psvn=str(self.get_psvn()),
+                        sourceFilePath=str(self.problem)
+                    ),
+                    timeout = my_timeout)
+            except requests.exceptions.RequestException:
+                # At present we are not trying to provide any information on what
+                # sort of exception occurred.
+                # Details on what can be issued appear in
+                # https://docs.python-requests.org/en/latest/user/quickstart/#errors-and-exceptions
+                my_res = None
+        if my_res:
+            return my_res.json()
+        return None
             
     def request_webwork(self, params):
         params.update( { "language": str(self.ww_language) } ) # Sets the desired translation language on the WW side
