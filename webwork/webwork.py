@@ -1006,8 +1006,14 @@ class WeBWorKXBlock(
             return None
             
     def request_webwork(self, params):
+        params.update( { "language": str(self.ww_language) } ) # Sets the desired translation language on the WW side
 
         if self.current_server_settings.get("server_type") == 'standalone':
+            # Providing these parameters is only supported by the Standalone renderer at present
+            params.update( {
+                "numCorrect":   str(self.ww_numCorrect),
+                "numIncorrect": str(self.ww_numIncorrect),
+            } )
             return self.request_webwork_standalone(params)
 
         if self.current_server_settings.get("server_type") == 'html2xml':
@@ -1285,14 +1291,7 @@ class WeBWorKXBlock(
             #====Treat Submit Answers Button request====
             if request['submit_type'] == "initialLoad":
                 request.pop('submit_type')
-                response_parameters = REQUEST_PARAMETERS
-                request.update(response_parameters)
-                request.update( { "language": str(self.ww_language) } ) # Sets the desired translation language on the WW side
-                if self.current_server_settings.get("server_type") == 'standalone': # Supported only by the Standalone renderer at present
-                    request.update( {
-                        "numCorrect":   str(self.ww_numCorrect),
-                        "numIncorrect": str(self.ww_numIncorrect),
-                    } )
+                request.update(REQUEST_PARAMETERS)
                 webwork_response = self.request_webwork(request)
                 response['renderedHTML'] = self._problem_from_json(webwork_response)
                 if response['renderedHTML'] == 'Error':
@@ -1356,16 +1355,7 @@ class WeBWorKXBlock(
                                                                           # If we get to the next "else" then elf._result_from_json(webwork_response)
                                                                           # will replace this with properly selected data.
 
-                    response_parameters = RESPONSE_PARAMETERS_CHECK
-                    request.update(response_parameters)
-                    request.update( { "language": str(self.ww_language) } ) # Sets the desired translation language on the WW side
-
-                    if self.current_server_settings.get("server_type") == 'standalone': # Supported only by the Standalone renderer at present
-                        request.update( {
-                            "numCorrect":   str(self.ww_numCorrect),
-                            "numIncorrect": str(self.ww_numIncorrect),
-                        } )
-
+                    request.update(RESPONSE_PARAMETERS_CHECK)
                     webwork_response = self.request_webwork(request)
 
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
@@ -1484,14 +1474,7 @@ class WeBWorKXBlock(
                         self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
                     )
                 elif self.problem_period is PPeriods.NoDue or self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueUnLocked:
-                    response_parameters = RESPONSE_PARAMETERS_PREVIEW
-                    request.update(response_parameters)
-                    request.update( { "language": str(self.ww_language) } ) # Sets the desired translation language on the WW side
-                    if self.current_server_settings.get("server_type") == 'standalone': # Supported only by the Standalone renderer at present
-                        request.update( {
-                            "numCorrect":   str(self.ww_numCorrect),
-                            "numIncorrect": str(self.ww_numIncorrect),
-                        } )
+                    request.update(RESPONSE_PARAMETERS_PREVIEW)
                     webwork_response = self.request_webwork(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
                     # On preview we do not need to save result of the call, so we do not want to make any change to the XBlock state.
@@ -1548,14 +1531,7 @@ class WeBWorKXBlock(
                     response['message'] = "An error occurred"
                     raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
                 if allow_show_correct:
-                    response_parameters = RESPONSE_PARAMETERS_SHOWCORRECT
-                    request.update(response_parameters)
-                    request.update( { "language": str(self.ww_language) } ) # Sets the desired translation language on the WW side
-                    if self.current_server_settings.get("server_type") == 'standalone': # Supported only by the Standalone renderer at present
-                        request.update( {
-                            "numCorrect":   str(self.ww_numCorrect),
-                            "numIncorrect": str(self.ww_numIncorrect),
-                        } )
+                    request.update(RESPONSE_PARAMETERS_SHOWCORRECT)
                     webwork_response = self.request_webwork(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
                     if response['renderedHTML'] == 'Error':
