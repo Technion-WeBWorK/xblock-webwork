@@ -52,6 +52,9 @@ from cms.djangoapps.models.settings.course_grading import CourseGradingModel
 from enum import IntFlag, unique
 from xmodule.util.duedate import get_extended_due_date
 
+# The recommended manner to format datetime for display in Studio and LMS is to use:
+from common.djangoapps.util.date_utils import get_default_time_display
+
 # Next line needed only if we decide to use the submissions API
 #from .sub_api import SubmittingXBlockMixin, sub_api
 
@@ -330,6 +333,11 @@ class WeBWorKXBlock(
         if DueDate is not None and GraceDuration is not None:
             self.lock_date_begin = DueDate + GraceDuration
             self.lock_date_end = self.lock_date_begin + LockDuration
+
+            # The formatting in the next line should be locale dependent, so we use
+            # get_default_time_display()
+            self.formatted_lock_date_end = get_default_time_display(self.lock_date_end)
+
             if Now < self.lock_date_begin:
                 self.problem_period = PPeriods.PreDue
             elif Now < self.lock_date_end:
@@ -338,6 +346,8 @@ class WeBWorKXBlock(
                 self.problem_period = PPeriods.PostDueUnLocked
         elif DueDate is None:
             self.problem_period = PPeriods.NoDue
+            self.lock_date_end = None
+            self.formatted_lock_date_end = None
         
     def clear_problem_period(self):
         del self._problem_period
@@ -437,7 +447,7 @@ class WeBWorKXBlock(
             # Use the course-wide settings for the relevant ww_server_id
             self.current_server_settings.update(self.main_settings.get('server_settings',{}).get(self.ww_server_id, {}))
             # Keep auth_data outside the current_server_settings field (which gets into the DB records of user_state/submissions).
-            self.current_server_settings.pop("auth_data")
+            self.current_server_settings.pop("auth_data", None)
         elif self.settings_type == 2:
             # Use the locally set values from the specific XBlock instance
             self.current_server_settings.update({  # Need str() on the first 2 to force into a final string form, and not __proxy__
@@ -483,6 +493,11 @@ class WeBWorKXBlock(
 
     # ----------- External, editable fields -----------
     editable_fields = (
+        # Main problem settings
+        'problem', 'max_allowed_score',
+        'ww_language',
+        'max_attempts', 'no_attempt_limit_required_attempts_before_show_answers',
+        'weight', 'psvn_key',
         # Main settings
         'settings_type',
         # For ID based server setting from course settings
@@ -490,16 +505,12 @@ class WeBWorKXBlock(
         'ww_server_id',
         # For manual server setting
         'ww_server_type', 'ww_server_api_url', 'ww_server_static_files_url', 'auth_data',
-        # Main problem settings
-        'problem', 'max_allowed_score',
-        'ww_language',
-        'max_attempts', 'no_attempt_limit_required_attempts_before_show_answers',
-        'weight', 'psvn_key',
         # Less important settings
-        'allow_show_answers',
+        'allow_show_answers', 'allow_ww_hints', 'allow_ww_solutions_with_correct_answers',
         'problem_banner_text', 'display_name',
         'webwork_request_timeout',
         'post_deadline_lockdown',
+        'custom_parameters',
         'iframe_min_height', 'iframe_max_height', 'iframe_min_width'
         )
 
@@ -634,6 +645,20 @@ class WeBWorKXBlock(
         help = _("Allow students to view correct answers (after deadline or if no deadline after all attempts used / or required number of attempts used when there is no attempt limit.)?"),
     )
 
+    allow_ww_hints = Boolean(
+        display_name = _("Allow WeBWorK to provide hints"),
+        default = False,
+        scope = Scope.settings,
+        help = _("Allow WeBWorK to provide hints, if the problem has such, based on the number of prior attempts (as sent by the XBlock using the WW style counters) and the threshold set in the problems file."),
+    )
+
+    allow_ww_solutions_with_correct_answers = Boolean(
+        display_name = _("Allow WeBWorK to provide solutions"),
+        default = False,
+        scope = Scope.settings,
+        help = _("Allow WeBWorK to provide the solution when Check Answers is used, if the problem has such."),
+    )
+
     custom_parameters = Dict(
         # Note: This is in place for future use, and is intended to be added to the request data.
         display_name=_("Custom Parameters"),
@@ -687,7 +712,7 @@ class WeBWorKXBlock(
     student_attempts = Integer(
         default = 0,
         scope = Scope.user_state,
-        help = _("Number of times student has submitted problem"),
+        help = _("Number of times the student has submitted this problem. Simple counter."),
     )
 
     ww_numCorrect = Integer(
@@ -801,7 +826,6 @@ class WeBWorKXBlock(
         default=False
     )
 
-
     last_submission_time = Date(
         help=_("Last submission time"),
         scope=Scope.user_state
@@ -816,11 +840,48 @@ class WeBWorKXBlock(
 
 
     def validate_field_data(self, validation, data):
-        if not isinstance(data.custom_parameters, list):
-            _ = self.runtime.service(self, "i18n").ugettext
+        _ = self.runtime.service(self, "i18n").ugettext
+        if not isinstance(data.custom_parameters, dict):
             validation.add(ValidationMessage(ValidationMessage.ERROR, str(
-                _("Custom Parameters must be a list")
+                _("Custom Parameters must be a JSON object (dictionary).")
             )))
+        if data.max_allowed_score < 0:
+            validation.add(ValidationMessage(ValidationMessage.ERROR, str(
+                _("Max allowed score must be non-negative.")
+            )))
+        if data.max_attempts < 0:
+            validation.add(ValidationMessage(ValidationMessage.ERROR, str(
+                _("Max allowed attempts must be non-negative. Zero is for no limit on the number of allowed attempts.")
+            )))
+        if data.no_attempt_limit_required_attempts_before_show_answers < 0:
+            validation.add(ValidationMessage(ValidationMessage.ERROR, str(
+                _("no_attempt_limit_required_attempts_before_show_answers must be non-negative.")
+            )))
+        if data.post_deadline_lockdown < 0:
+            validation.add(ValidationMessage(ValidationMessage.ERROR, str(
+                _("Post deadline lockdown (in hours) must be non-negative. Use 0 for no lock-down period.")
+            )))
+        if data.iframe_min_height < 50:
+            validation.add(ValidationMessage(ValidationMessage.ERROR, str(
+                _("iframe_min_height must be at least 50 pixels.")
+            )))
+        if data.iframe_max_height < 50:
+            validation.add(ValidationMessage(ValidationMessage.ERROR, str(
+                _("iframe_max_height must be at least 50 pixels.")
+            )))
+        if data.iframe_min_width < 300:
+            validation.add(ValidationMessage(ValidationMessage.ERROR, str(
+                _("iframe_min_width must be at least 300 pixels.")
+            )))
+        if data.webwork_request_timeout < 0.5:
+            validation.add(ValidationMessage(ValidationMessage.ERROR, str(
+                _("webwork_request_timeout must be at least 0.5 (seconds).")
+            )))
+        if data.weight < 0:
+            validation.add(ValidationMessage(ValidationMessage.ERROR, str(
+                _("weight must be non-negative. A weight of 0 essentially removes the score on this problem from the section grade calculation.")
+            )))
+
 
     # ---------- Utils --------------
 
@@ -1014,6 +1075,9 @@ class WeBWorKXBlock(
                 "numCorrect":   str(self.ww_numCorrect),
                 "numIncorrect": str(self.ww_numIncorrect),
             } )
+            if self.allow_ww_hints:
+                params.update( { "showHints": "1" } )
+
             return self.request_webwork_standalone(params)
 
         if self.current_server_settings.get("server_type") == 'html2xml':
@@ -1081,13 +1145,6 @@ class WeBWorKXBlock(
         data = pkg_resources.resource_string(__name__, path)
         return data.decode("utf8")
 
-# Not in use
-#    def set_graceperiod(self):
-#        try:
-#            self.graceperiod = CourseGradingModel.fetch(self.course.id).grace_period
-#        except AttributeError:
-#            self.graceperiod = None
-
     # ----------- View -----------
     #def student_view(self, context=None, show_detailed_errors=True):
     def student_view(self, context=None, show_detailed_errors=False):
@@ -1107,12 +1164,10 @@ class WeBWorKXBlock(
         if not self.seed:
             self.seed = random.randint(1,2**31-1)
 
-        html_settings = 'lang=\"{}\" dir=\"{}\"'.format("en","ltr")
         loading1 = "Your problem should load soon."
         loading2 = "Please wait."
-        loadingHtml = "<html {html_settings}><body>{loading1}<br>{loading2}</body></html>"
-        mysrcdoc = loadingHtml.format(html_settings = html_settings,
-            loading1 = loading1, loading2 = loading2 )
+        loadingHtml = "<html><body>{loading1}<br>{loading2}</body></html>"
+        mysrcdoc = loadingHtml.format(loading1 = loading1, loading2 = loading2)
 
         debug_data = ""
         # This is sample code to generate some debug info to display under the problem
@@ -1183,7 +1238,7 @@ class WeBWorKXBlock(
                 max_attempts = str(self.max_attempts))
         elif self.max_attempts == 0:
             attempts_message2 = "You are allowed an unlimited number of graded submissions to this problem."
-        return "<br>{m1}<br>{m2}".format( m1 = attempts_message1, m2 = attempts_message2)
+        return "<br>" + attempts_message1 + "<br>" + attempts_message2
 
     def create_current_score_message(self):
         """
@@ -1207,18 +1262,18 @@ class WeBWorKXBlock(
         if score_saved:
             if new_score > self.best_student_score:
                 return "You score from this submission is {new_score} from {max_score} points.".format(
-                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + \
+                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + "<br>" + \
                     "The new score will replace your prior best score of {old_best} points.{attempts_message}".format(
                         old_best = str(self.best_student_score), attempts_message = my_attempts_message )
             else:
                 return "You score from this submission is {new_score} from {max_score} points.".format(
-                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + \
+                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + "<br>" + \
                     "That is less than your prior best score of {old_best} points, so the prior score remains your current recorded score for the problem.{attempts_message}".format(
                         old_best = str(self.best_student_score), attempts_message = my_attempts_message )
         else:
             return "<strong>" + "This is a submission which is not for credit." + "</strong><br>" + \
                 "You score from this submission is {new_score} from {max_score} points.".format(
-                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + \
+                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + "<br>" + \
                 "Your recorded best score on the problem is {old_best} points.".format(
                     new_score = str(new_score), max_score = str(self.get_max_score()), old_best = str(self.best_student_score) )
 
@@ -1288,7 +1343,6 @@ class WeBWorKXBlock(
             # and waste space in the database.
 
             # Handle first by submission type to reduce code duplication
-            #====Treat Submit Answers Button request====
             if request['submit_type'] == "initialLoad":
                 request.pop('submit_type')
                 request.update(REQUEST_PARAMETERS)
@@ -1301,6 +1355,7 @@ class WeBWorKXBlock(
                     response['success'] = True
                     response['message'] = self.create_current_score_message()
             elif request['submit_type'] == "submitAnswers":
+                request.pop('submit_type')
                 # We will only modify self.student_answer only once we are certain that a submission is
                 # allowed, to avoid an unnecessary state update which would waste space in the database.
                 allow_submit = False
@@ -1309,36 +1364,40 @@ class WeBWorKXBlock(
                 message_when_allowed = None
                 # FIX
                 if self.problem_period is PPeriods.PostDueLocked:
-                    response['message'] = (
-                        "Sorry, you cannot submit answers now. Submissions are now permitted until " +
-                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S"))
+                    allow_submit = False
+                    part1 = "Sorry, you cannot submit answers now."
+                    if self.formatted_lock_date_end:
+                        part2 = "<br>" + "Additional use of the problem is not permitted until {unlock_datetime}".format(unlock_datetime = self.formatted_lock_date_end)
+                    else:
+                        part2 = ""
+                    response['message'] = part1 + part2 + "<br>" + self.create_current_score_message()
                 elif self.problem_period is PPeriods.PostDueUnLocked:
                     allow_submit = True
                     save_grade = False    
                 elif self.problem_period is PPeriods.PreDue:
-                    # Check if the conditions for processing the submission are satisfied:
-                    # for the period==PreDue:
-                    #     self.max_attempts==0 or self.student_attempts <= self.max_attempts
                     if self.max_attempts == 0:
                         allow_submit = True
                         save_grade = True
                     if self.max_attempts > 0:
-                        if self.student_attempts > self.max_attempts:
-                            block_reason_message = ("Sorry, can't submit now since your made the maximum number of allowed submissions for credit." +
-                                                    "Additional use of the problem will be permitted after" +
-                                                    self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S") )
+                        if self.student_attempts >= self.max_attempts:
+                            allow_submit = False
+                            part1 = "Sorry, can't submit now since your made the maximum number of allowed submissions for credit."
+                            if self.formatted_lock_date_end:
+                                part2 = "<br>" + "Additional use of the problem is not permitted until {unlock_datetime}".format(unlock_datetime = self.formatted_lock_date_end)
+                            else:
+                                part2 = ""
+                            block_reason_message = part1 + part2
                         else:
                             allow_submit = True
                             save_grade = True
                 elif self.problem_period is PPeriods.NoDue:
-                    if self.max_attempts > 0 and self.student_attempts > self.max_attempts:
+                    if self.max_attempts > 0 and self.student_attempts >= self.max_attempts:
                         allow_submit = True
                         save_grade = False
-                        message_when_allowed = ( "You have exceeded the maximum number (" +
-                                                 str(self.max_attempts) +
-                                                 ")of graded attempts allowed on this problem.<br>" +
-                                                 "This and additional submissions are allowed, but your recorded grade will not be changed.<br>" +
-                                                 "You may now also use the Show Correct Answers button" )
+                        message_when_allowed = "You have exceeded the maximum number ({max_attempts}) of graded attempts allowed on this problem.".format(
+                            max_attempts = str(self.max_attempts) ) + "<br>" + \
+                            "This and additional submissions are allowed, but your recorded grade will not be changed." + "<br>" + \
+                            "You may now also use the Show Correct Answers button."
                     else:
                         allow_submit = True
                         save_grade = True
@@ -1346,7 +1405,7 @@ class WeBWorKXBlock(
                     # Bad value
                     response['success'] = False
                     response['message'] = "An error occurred"
-                    raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
+                    raise WeBWorKXBlockError("An error determining while processing your request. (Period error)")
 
                 if allow_submit:
                     # This is a real submission, save the original submission data as an initial value of the submission.
@@ -1369,8 +1428,10 @@ class WeBWorKXBlock(
                         response['success'] = True
                         response['message'] = '' # currently no error
 
-                        # Grading apparently succeeded, so an attempt is counted.
-                        self.student_attempts += 1
+                        if save_grade:
+                            # We only should count attempts made when the grade will be saved (ex. before the deadline)
+                            # Grading apparently succeeded, so an attempt is counted.
+                            self.student_attempts += 1
 
                         response.update( self.period_button_settings() ) # The values may change due to the new attempt
 
@@ -1385,7 +1446,7 @@ class WeBWorKXBlock(
                         response['scored'] = True
 
                         if message_when_allowed:
-                            response['message'] = message_when_allowed
+                            response['message'] = message_when_allowed + "<br>" + self.create_score_message(scaled_ww_score, save_grade)
                         if save_grade:
 
                             # If we are allowed to save a grade, then the WW style attempt counters must be update
@@ -1464,16 +1525,24 @@ class WeBWorKXBlock(
                     # Give message
                     response['success'] = False
                     if block_reason_message:
-                        response['message'] = block_reason_message
+                        response['message'] = block_reason_message + \
+                            "<br>" + self.create_current_score_message()
             elif request['submit_type'] == "previewAnswers":
+                request.pop('submit_type')
                 # We do not modify self.student_answer, so no state update should occur,
                 # which would trigger a save() of the XBlock, and waste space in the database.
-                if self.problem_period is PPeriods.PostDueLocked:
-                    response['message'] = (
-                        "Sorry, you cannot preview answers now. Use of this problem is not permitted until " +
-                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
-                    )
+                if self.problem_period is PPeriods.PostDueLocked or (
+                        self.problem_period is PPeriods.PreDue and
+                        self.max_attempts > 0 and
+                        self.student_attempts >= self.max_attempts ):
+                    part1 = "Sorry, you cannot preview answers now."
+                    if self.formatted_lock_date_end:
+                        part2 = "<br>" + "Additional use of the problem is not permitted until {unlock_datetime}".format(unlock_datetime = self.formatted_lock_date_end)
+                    else:
+                        part2 = ""
+                    response['message'] = part1 + part2 + "<br>" + self.create_current_score_message()
                 elif self.problem_period is PPeriods.NoDue or self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueUnLocked:
+                    # If PPeriods.PreDue and attempt limit hit - handled above
                     request.update(RESPONSE_PARAMETERS_PREVIEW)
                     webwork_response = self.request_webwork(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
@@ -1491,40 +1560,46 @@ class WeBWorKXBlock(
                     response['message'] = "An error occurred"
                     raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
             elif request['submit_type'] == "showCorrectAnswers":
+                request.pop('submit_type')
+                allow_show_correct = False;
                 # We usually do not modify self.student_answer, so no state update should occur,
                 # which would trigger a save() of the XBlock, and waste space in the database.
 
                 # Note: self.allow_show_answer is a main XBlock level setting
                 #       allow_show_correct is the locally calculated value used to determine whether the action is permitted.
                 if not self.allow_show_answers:
-                    response['message'] = "Sorry, this problem is set to forbid access to the correct answers."
+                    response['message'] = "Sorry, this problem is set to forbid access to the correct answers." + \
+                        "<br>" + self.create_current_score_message()
                 elif self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueLocked:
-                    response['message'] = (
-                        "Sorry, you cannot request to see the correct answers now. Answers will become available at " +
-                        self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S")
-                    )
+                    part1 = "Sorry, you cannot request to see the correct answers now."
+                    if self.formatted_lock_date_end:
+                        part2 = "<br>" + "Answers will become available at {unlock_datetime}".format(unlock_datetime = self.formatted_lock_date_end)
+                    else:
+                        part2 = ""
+                    response['message'] = part1 + part2 + "<br>" + self.create_current_score_message()
                 elif self.problem_period is PPeriods.PostDueUnLocked or self.problem_period is PPeriods.NoDue:
                     # Conditionally allowed. NoDue requires an additional condition to be tested
                     allow_show_correct = False;
                     if self.problem_period is PPeriods.PostDueUnLocked:
                         allow_show_correct = True
                     if self.problem_period is PPeriods.NoDue:
+                        end_of_message = ""
+                        required_to_show = 500 # fallback if max_attempts is negative
                         if self.max_attempts == 0:
                             required_to_show = self.no_attempt_limit_required_attempts_before_show_answers
-                            end_of_message = ""
                         if self.max_attempts > 0:
                             required_to_show = self.max_attempts
-                            end_of_message = ( "<br>Otherwise the answers will become available at " +
-                                self.lock_date_end.strftime("%d/%m/%Y, %H:%M:%S") )
+                        if self.max_attempts >= 0:
+                            end_of_message = "<br>" + "Answers will become available after you make at {required_to_show} submissions.".format(required_to_show = required_to_show)
                         if self.student_attempts >= required_to_show:
                             allow_show_correct = True
                         else:
-                            response['message'] = (
-                                "Correct answers for this problem will become available after you submit at least " +
-                                str(required_to_show) + " answers.<br>" +
-                                "You have already submitted " + str(self.student_attempts) + " answers to be graded." +
-                                end_of_message
-                            )
+                            response['message'] = \
+                                "Correct answers for this problem will become available after you submit at least {required_to_show} answers.".format(
+                                    required_to_show = str(required_to_show) ) + " <br>" + \
+                                "You have already submitted {attempts} answers to be graded.".format( attempts = str(self.student_attempts) ) + \
+                                end_of_message + \
+                                "<br>" + self.create_current_score_message()
                 else:
                     # Bad value
                     response['success'] = False
@@ -1532,6 +1607,8 @@ class WeBWorKXBlock(
                     raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
                 if allow_show_correct:
                     request.update(RESPONSE_PARAMETERS_SHOWCORRECT)
+                    if self.allow_ww_solutions_with_correct_answers:
+                        request.update( { "showSolutions": "1" } )
                     webwork_response = self.request_webwork(request)
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
                     if response['renderedHTML'] == 'Error':
