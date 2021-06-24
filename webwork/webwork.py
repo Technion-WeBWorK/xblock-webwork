@@ -40,6 +40,7 @@ import pytz # python timezone
 from pytz import utc
 from xblock.core import XBlock
 from django.utils.translation import ugettext_lazy as _
+from django.utils import translation # FIXME remove after debug i18n-try1 branch
 from xblock.fields import String, Scope, Integer, List, Dict, Float, Boolean, DateTime, UNIQUE_ID
 from xmodule.fields import Date
 from xblock.validation import ValidationMessage
@@ -315,6 +316,7 @@ class WWProblemPeriod:
         self._period = PPeriods.UnKnown
 
 @XBlock.needs("user")
+@XBlock.needs('i18n')
 class WeBWorKXBlock(
     ScorableXBlockMixin, XBlock, StudioEditableXBlockMixin,
     #SubmittingXBlockMixin,  # Needed if using the the submissions API
@@ -1220,6 +1222,7 @@ class WeBWorKXBlock(
 
         # Get updated main course settings from main course "Other course settings"
         # Do this now, as we may need updated main connection settings
+        # translation.activate('he') FIXME remove after debug i18n-try1 branch
         self.reload_main_setting()
         # and then
         self.set_current_server_settings()
@@ -1291,29 +1294,41 @@ class WeBWorKXBlock(
         Message to show about attempts status
         """
         if self.student_attempts > 0:
-            attempts_message1 = "So far you have made {attempts_used} graded submissions to this problem.".format(
-                attempts_used = str(self.student_attempts))
+            # translation.activate('he') FIXME remove after debug i18n-try1 branch
+            attempts_message1 = self.runtime.service(self, "i18n").ugettext(
+                "So far you have made {attempts_used} graded submissions to this problem.").format(
+                attempts_used = str(self.student_attempts)
+                )
         else:
-            attempts_message1 = "You have not yet made a graded submission to this problem."
+            attempts_message1 = self.runtime.service(self, "i18n").ugettext(
+                "You have not yet made a graded submission to this problem.").format()
 
         if self.final_max_attempts() > 0:
-            attempts_message2 = "You are allowed at most {max_attempts} graded submissions to this problem.".format(
-                max_attempts = str(self.final_max_attempts()))
+            # translation.activate('he') FIXME remove after debug i18n-try1 branch
+            attempts_message2 = self.runtime.service(self, "i18n").ugettext(
+                "You are allowed at most {max_attempts} graded submissions to this problem.").format(
+                max_attempts = str(self.final_max_attempts())
+                )
         elif self.final_max_attempts() == 0:
-            attempts_message2 = "You are allowed an unlimited number of graded submissions to this problem."
+            attempts_message2 = self.runtime.service(self, "i18n").ugettext(
+                "You are allowed an unlimited number of graded submissions to this problem.").format()
         return "<br>" + attempts_message1 + "<br>" + attempts_message2
 
     def create_current_score_message(self):
         """
         Message to show for current score (on load, show correct, show preview)
         """
+        
         my_attempts_message = self.create_attempts_message()
         if self.student_attempts == 0:
             return my_attempts_message
         else:
-            return "Your recorded (best) score is {old_best} points from {max_score} points.{attempts_message}".format(
+            # translation.activate('he') FIXME remove after debug i18n-try1 branch
+            return self.runtime.service(self, "i18n").ugettext(
+                "Your recorded (best) score is {old_best} points from {max_score} points.{attempts_message}").format(
                 old_best = str(self.best_student_score), max_score = str(self.get_max_score()),
-                attempts_message = my_attempts_message )
+                attempts_message = my_attempts_message
+                )
 
 
     def create_score_message(self, new_score, score_saved):
@@ -1324,21 +1339,34 @@ class WeBWorKXBlock(
 
         if score_saved:
             if new_score > self.best_student_score:
-                return "You score from this submission is {new_score} from {max_score} points.".format(
-                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + "<br>" + \
-                    "The new score will replace your prior best score of {old_best} points.{attempts_message}".format(
-                        old_best = str(self.best_student_score), attempts_message = my_attempts_message )
+                return self.runtime.service(self, "i18n").ugettext(
+                    "Your score from this submission is {new_score} from {max_score} points.").format(
+                    new_score = str(new_score), max_score = str(self.get_max_score())
+                    ) + "<br>" + \
+                    self.runtime.service(self, "i18n").ugettext(
+                        "The new score will replace your prior best score of {old_best} points.{attempts_message}").format(
+                        old_best = str(self.best_student_score), attempts_message = my_attempts_message
+                        )
             else:
-                return "You score from this submission is {new_score} from {max_score} points.".format(
-                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + "<br>" + \
-                    "That is less than your prior best score of {old_best} points, so the prior score remains your current recorded score for the problem.{attempts_message}".format(
-                        old_best = str(self.best_student_score), attempts_message = my_attempts_message )
+                return self.runtime.service(self, "i18n").ugettext(
+                    "Your score from this submission is {new_score} from {max_score} points.").format(
+                    new_score = str(new_score), max_score = str(self.get_max_score())
+                    ) + "<br>" + \
+                    self.runtime.service(self, "i18n").ugettext(
+                        "That is less than your prior best score of {old_best} points, so the prior score remains your current recorded score for the problem.{attempts_message}").format(
+                        old_best = str(self.best_student_score), attempts_message = my_attempts_message
+                        )
         else:
-            return "<strong>" + "This is a submission which is not for credit." + "</strong><br>" + \
-                "You score from this submission is {new_score} from {max_score} points.".format(
-                    new_score = str(new_score), max_score = str(self.get_max_score()) ) + "<br>" + \
-                "Your recorded best score on the problem is {old_best} points.".format(
-                    new_score = str(new_score), max_score = str(self.get_max_score()), old_best = str(self.best_student_score) )
+            return "<strong>" + self.runtime.service(self, "i18n").ugettext(
+                "This is a submission which is not for credit.").format() + "</strong><br>" + \
+                self.runtime.service(self, "i18n").ugettext(
+                    "Your score from this submission is {new_score} from {max_score} points.").format(
+                    new_score = str(new_score), max_score = str(self.get_max_score())
+                    ) + "<br>" + \
+                self.runtime.service(self, "i18n").ugettext(
+                    "Your recorded best score on the problem is {old_best} points.").format(
+                    new_score = str(new_score), max_score = str(self.get_max_score()), old_best = str(self.best_student_score)
+                    )
 
     # ----------- Handler for standalone -----------
     @XBlock.handler
@@ -1430,7 +1458,10 @@ class WeBWorKXBlock(
                     allow_submit = False
                     part1 = "Sorry, you cannot submit answers now."
                     if self.formatted_lock_date_end:
-                        part2 = "<br>" + "Additional use of the problem is not permitted until {unlock_datetime}".format(unlock_datetime = self.formatted_lock_date_end)
+                        part2 = "<br>" + self.runtime.service(self, "i18n").ugettext(
+                            "Additional use of the problem is not permitted until {unlock_datetime}").format(
+                                unlock_datetime = self.formatted_lock_date_end
+                                )
                     else:
                         part2 = ""
                     response['message'] = part1 + part2 + "<br>" + self.create_current_score_message()
@@ -1444,9 +1475,13 @@ class WeBWorKXBlock(
                     if self.final_max_attempts() > 0:
                         if self.student_attempts >= self.final_max_attempts():
                             allow_submit = False
-                            part1 = "Sorry, can't submit now since your made the maximum number of allowed submissions for credit."
+                            part1 = self.runtime.service(self, "i18n").ugettext(
+                                "Sorry, can't submit now since you made the maximum number of allowed submissions for credit.").format()
                             if self.formatted_lock_date_end:
-                                part2 = "<br>" + "Additional use of the problem is not permitted until {unlock_datetime}".format(unlock_datetime = self.formatted_lock_date_end)
+                                part2 = "<br>" + self.runtime.service(self, "i18n").ugettext(
+                                    "Additional use of the problem is not permitted until {unlock_datetime}").format(
+                                        unlock_datetime = self.formatted_lock_date_end
+                                        )
                             else:
                                 part2 = ""
                             block_reason_message = part1 + part2
@@ -1457,10 +1492,13 @@ class WeBWorKXBlock(
                     if self.final_max_attempts() > 0 and self.student_attempts >= self.final_max_attempts():
                         allow_submit = True
                         save_grade = False
-                        message_when_allowed = "You have exceeded the maximum number ({max_attempts}) of graded attempts allowed on this problem.".format(
-                            max_attempts = str(self.final_max_attempts()) ) + "<br>" + \
-                            "This and additional submissions are allowed, but your recorded grade will not be changed." + "<br>" + \
-                            "You may now also use the Show Correct Answers button."
+                        message_when_allowed = self.runtime.service(self, "i18n").ugettext(
+                            "You have exceeded the maximum number ({max_attempts}) of graded attempts allowed on this problem.").format(
+                            max_attempts = str(self.final_max_attempts())
+                            ) + "<br>" + \
+                            self.runtime.service(self, "i18n").ugettext(
+                                "This and additional submissions are allowed, but your recorded grade will not be changed.").format() + "<br>" + \
+                            self.runtime.service(self, "i18n").ugettext("You may now also use the Show Correct Answers button.").format()
                     else:
                         allow_submit = True
                         save_grade = True
@@ -1600,7 +1638,10 @@ class WeBWorKXBlock(
                         self.student_attempts >= self.final_max_attempts() ):
                     part1 = "Sorry, you cannot preview answers now."
                     if self.formatted_lock_date_end:
-                        part2 = "<br>" + "Additional use of the problem is not permitted until {unlock_datetime}".format(unlock_datetime = self.formatted_lock_date_end)
+                        part2 = "<br>" + self.runtime.service(self, "i18n").ugettext(
+                            "Additional use of the problem is not permitted until {unlock_datetime}").format(
+                                unlock_datetime = self.formatted_lock_date_end
+                                )
                     else:
                         part2 = ""
                     response['message'] = part1 + part2 + "<br>" + self.create_current_score_message()
@@ -1636,7 +1677,10 @@ class WeBWorKXBlock(
                 elif self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueLocked:
                     part1 = "Sorry, you cannot request to see the correct answers now."
                     if self.formatted_lock_date_end:
-                        part2 = "<br>" + "Answers will become available at {unlock_datetime}".format(unlock_datetime = self.formatted_lock_date_end)
+                        part2 = "<br>" + self.runtime.service(self, "i18n").ugettext(
+                            "Answers will become available at {unlock_datetime}").format(
+                                unlock_datetime = self.formatted_lock_date_end
+                                )
                     else:
                         part2 = ""
                     response['message'] = part1 + part2 + "<br>" + self.create_current_score_message()
@@ -1653,16 +1697,22 @@ class WeBWorKXBlock(
                         if self.final_max_attempts() > 0:
                             required_to_show = self.final_max_attempts()
                         if self.final_max_attempts() >= 0:
-                            end_of_message = "<br>" + "Answers will become available after you make at {required_to_show} submissions.".format(required_to_show = required_to_show)
+                            end_of_message = "<br>" + self.runtime.service(self, "i18n").ugettext(
+                                "Answers will become available after you make at least {required_to_show} submissions.").format(
+                                    required_to_show = required_to_show
+                                    )
                         if self.student_attempts >= required_to_show:
                             allow_show_correct = True
                         else:
                             response['message'] = \
-                                "Correct answers for this problem will become available after you submit at least {required_to_show} answers.".format(
-                                    required_to_show = str(required_to_show) ) + " <br>" + \
-                                "You have already submitted {attempts} answers to be graded.".format( attempts = str(self.student_attempts) ) + \
-                                end_of_message + \
-                                "<br>" + self.create_current_score_message()
+                                self.runtime.service(self, "i18n").ugettext(
+                                    "Correct answers for this problem will become available after you submit at least {required_to_show} answers.").format(
+                                    required_to_show = str(required_to_show)
+                                    ) + " <br>" + \
+                                self.runtime.service(self, "i18n").ugettext(
+                                    "You have already submitted {attempts} answers to be graded.").format(
+                                        attempts = str(self.student_attempts)
+                                        ) + end_of_message + "<br>" + self.create_current_score_message()
                 else:
                     # Bad value
                     response['success'] = False
