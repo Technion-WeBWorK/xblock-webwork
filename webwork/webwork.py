@@ -10,6 +10,9 @@ using either
         from https://github.com/openwebwork/webwork2/
         which requires running a full "regular" WeBWorK server,
         and is not likely to handle large loads well.
+
+        The support for html2xml depends on the "standalone_style" support
+        proposed in https://github.com/openwebwork/webwork2/pull/1426.
 (c) 2021 Technion - Israel Institute of Technology
     This code was originally developed in the Technion.
 
@@ -56,23 +59,18 @@ from xmodule.util.duedate import get_extended_due_date
 # The recommended manner to format datetime for display in Studio and LMS is to use:
 from common.djangoapps.util.date_utils import get_default_time_display
 
+# Need to support making an encrypted JWT for use by the Standalone renderer
+from jwcrypto import jwt, jwk
+import jwcrypto.common
+
 # Next line needed only if we decide to use the submissions API
 #from .sub_api import SubmittingXBlockMixin, sub_api
 
-# Lines to allow logging to console.
-# Copied from https://gitlab.edvsz.hs-osnabrueck.de/lhannigb/showblock/-/blob/master/showblock/showblock.py
-
+# Lines to allow logging:
 #import logging
-#DEBUGLVL = logging.INFO
 #logger = logging.getLogger(__name__)
-#logger.setLevel(DEBUGLVL)
-#ch = logging.StreamHandler()
-#ch.setLevel(DEBUGLVL)
-#logger.addHandler(ch)
-
-# End lines copied from https://gitlab.edvsz.hs-osnabrueck.de/lhannigb/showblock/-/blob/master/showblock/showblock.py
-
-# When those lines are active, we can issue log messages using logger.info("Message")
+#logger.setLevel(logging.INFO)
+# When the prior 3 lines are active, we can issue "info" log messages using logger.info("Message")
 
 # =========================================================================================
 
@@ -1100,8 +1098,49 @@ class WeBWorKXBlock(
                 # https://docs.python-requests.org/en/latest/user/quickstart/#errors-and-exceptions
                 my_res = None
         if my_res:
-            return my_res.json()
+            try:
+                return my_res.json()
+            except ValueError: # includes simplejson.errors.JSONDecodeError
+                return None
         return None
+
+    def make_problemJWT_for_standalone(self, params):
+        """
+        Create an encrypted problemJWT to send to the Standalone renderer.
+        """
+
+        # Get the key/aud data needed to create the JWT for this server
+        my_auth_data = self.get_current_auth_data()
+        my_key_raw = my_auth_data.get('problemJWTsecret',None)
+        my_aud = my_auth_data.get('aud',None)
+
+        if not my_aud or not my_key_raw:
+            # Cannot get the data needed to make the JWT
+            #logger.info( "Failed to get JWT setup data" )
+            return None
+
+        # Fixme - this is just a test
+        # Create dict of claims
+        my_claims = {
+            'aud' : str(my_aud),
+            'problemSeed': str(self.seed),
+            'psvn' : str(self.get_psvn()),
+            'sourceFilePath' : str(self.problem)
+        }
+
+        try:
+            # Create the base64_urlencoded format needed by jwcrypto
+            my_key_encoded = jwcrypto.common.base64url_encode( my_key_raw )
+
+            my_k_dict = {"k": my_key_encoded, "kty": "oct"}
+            my_key = jwk.JWK(**my_k_dict)
+
+            # Make the encrypted token
+            my_etoken = jwt.JWT(header={"alg": "A256KW", "enc": "A256CBC-HS512"}, claims= my_claims )
+            my_etoken.make_encrypted_token(my_key)
+            return my_etoken.serialize()
+        except Exception:
+            return None
 
     def request_webwork_standalone(self, params):
         # Standalone uses HTTP POST
@@ -1111,14 +1150,25 @@ class WeBWorKXBlock(
         my_timeout = max(self.webwork_request_timeout,0.5)
         my_url = self.current_server_settings.get("server_api_url")
         my_res = None
+
+        my_jwt = self.make_problemJWT_for_standalone( params )
+        if my_jwt:
+            ##logger.info( my_jwt )
+            params.update( { "problemJWT": str(my_jwt) } )
+            params.pop("auth_data", None)
+        else:
+            #logger.info( 'error making JWT.' )
+            return None
+
         if my_url:
             try:
                 my_res = requests.post(my_url,
                     params=dict(params,
                         # standalone does not have course/user/password
-                        problemSeed=str(self.seed),
-                        psvn=str(self.get_psvn()),
-                        sourceFilePath=str(self.problem)
+                        # The following fields are not in the JWT and should only be there
+                        #problemSeed=str(self.seed),
+                        #psvn=str(self.get_psvn()),
+                        #sourceFilePath=str(self.problem)
                     ),
                     timeout = my_timeout)
             except requests.exceptions.RequestException:
@@ -1128,7 +1178,10 @@ class WeBWorKXBlock(
                 # https://docs.python-requests.org/en/latest/user/quickstart/#errors-and-exceptions
                 my_res = None
         if my_res:
-            return my_res.json()
+            try:
+                return my_res.json()
+            except ValueError: # includes simplejson.errors.JSONDecodeError
+                return None
         return None
             
     def request_webwork(self, params):
