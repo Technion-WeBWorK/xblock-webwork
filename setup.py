@@ -68,5 +68,5 @@ setup(
             'webwork = webwork:WeBWorKXBlock',
         ]
     },
-    package_data=package_data("webwork", ["static", "public"]),
+    package_data=package_data("webwork", ["static", "public", "translations"]),
 )
