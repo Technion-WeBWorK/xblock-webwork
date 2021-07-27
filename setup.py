@@ -1,7 +1,6 @@
-"""Setup for math XBlock."""
+"""Setup for WeBWorK XBlock."""
 
 import os
-
 from setuptools import setup
 
 
@@ -21,21 +20,53 @@ def package_data(pkg, roots):
     return {pkg: data}
 
 
+def load_requirements(*requirements_paths):
+    """
+    Load all requirements from the specified requirements files.
+    Returns a list of requirement strings.
+    """
+    requirements = set()
+    for path in requirements_paths:
+        with open(path) as reqs:
+            requirements.update(
+                line.split('#')[0].strip() for line in reqs
+                if is_requirement(line.strip())
+            )
+    return list(requirements)
+
+
+def is_requirement(line):
+    """
+    Return True if the requirement line is a package requirement;
+    that is, it is not blank, a comment, a URL, or an included file.
+    """
+    return line and not line.startswith(('-r', '#', '-e', 'git+', '-c'))
+
+
 setup(
     name='webwork-xblock',
     version='0.1',
-    description='Webwork XBlock',
-    license='UNKNOWN',
+    description='WeBWorK XBlock',   # TODO: write a better description.
+    license='UNKNOWN',          # TODO: choose a license
+    classifiers=[
+        'Classifier: Development Status ::  - Beta',
+        'Environment :: Web Environment',
+        'Intended Audience :: Developers',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.8',
+        'Framework :: Django',
+        'Framework :: Django :: 2.2',
+    ],
     packages=[
         'webwork',
     ],
-    install_requires=[
-        'XBlock',
-    ],
+    install_requires=load_requirements('requirements/base.in'),
     entry_points={
         'xblock.v1': [
             'webwork = webwork:WeBWorKXBlock',
         ]
     },
-    package_data=package_data("webwork", ["static", "public"]),
+    package_data=package_data("webwork", ["static", "public", "translations"]),
 )

@@ -1,0 +1,17 @@
+<div class="webwork_block">
+
+	<h3>{self.problem_banner_text}</h3>
+
+        <div id="edx_message-{unique_id}"></div>
+        <div id="edx_webwork_result-{unique_id}"></div>
+
+        <div id="edx_webwork_problem">
+          <div id='render-contents' class='content'>
+            <iframe class="iframe-responsive" id="rendered-problem-{unique_id}" title="WeBWorK problem" style="width: 100%;" srcdoc="{srcdoc}">
+                 Problem should load here soon.
+            </iframe>
+            {iFrameInit}
+            {debug_data}
+          </div>
+        </div>
+</div>

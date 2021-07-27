@@ -1,0 +1,81 @@
+
+WAS GLOBAL - BEING REPLACED:
+  WWSERVERLIST
+  SERVER
+  SERVERTYPE
+
+"Global"
+  main_settings   = the JSON config data retreived from the course
+
+XBlock fields
+
+  Server related settings:
+    settings_type = whether main settings are being used.. to allow manual
+      override when no main settings
+        When set to 1 (="Provided by course via "Other Course Settings")
+          the server_id field should be populated with the available options
+          and visible.
+        When set to 2 (="Manual settings") the server_id field should be
+          invisible
+      
+    server_id = when set, the ID of server from the main settings
+      Visible when relevant, and options populated into values.
+
+    For use when in manual mode - otherwise should be left as None and kept invisible
+      server_type
+      server_url
+      auth_data - when needed should be a JSON dictionary of the needed settings
+        *** replacing 'ww_course', 'ww_username', 'ww_password' for html2xml mode
+        *** help data should explain what is needed or FIXME + promise to explain
+
+  Problem - main settings
+    problem = Path for WW problem file (as expected on the WW server)
+    max_allowed_score
+    max_attempts
+
+  Problem - display related settings
+    display_name
+    iframe_min_height
+    iframe_max_height
+    iframe_min_width
+    unique_id
+
+  Problem - special settings - can be left as None
+
+    course_grace_period_minutes = # of minutes to allow after deadline - course level
+    problem_additional_grace_period_minutes = # of additional minutes for this problem
+    student_additional_grace_period_hours = # of additional hours for this student on all problems
+    student_problem_additional_grace_period_minutes = # of additional hours for this student on this problem
+
+    problem_answer_delay = # of minutes after deadline when answers become available, when set overrides the
+      course level default_answer_delay
+
+    problem_show_answers = should show answers be made available after the relevant answer_delay
+      To override the course wide default_show_answers
+    problem_answer_delay = # of minutes after deadline when answers become available, when set overrides the
+      course level default_answer_delay
+
+    problem_html_lang = overrode default_html_lang
+    problem_html_dir = overrode default_html_dir
+
+    custom_parameters
+
+  User state for problem:  (Scope.user_state)
+    student_answer
+    student_attempts # CHANGE to be like WW
+      student_numCorrect
+      student_numIncorrect
+    student_score
+    seed
+    psvn_index = index number of which PSVN to use for this instance of the problem
+      * Used to pull a value out of psvn_array
+
+    MAYBE:
+      last_answer = WW format to allow reloading prior answers during initial rendering. Needs support on the standalone side
+
+  User state for system (for course would be better but not possible):  (Scope.preferences)
+    psvn_dict = dictionary (init as empty dict)
+      keys are courseID, and value is a array of PSVN values for this user for this course.
+        On first attempt to access the course array - create with 1 value, add more as needed
+    *** The values in this array MUST be fixed for a entire course
+

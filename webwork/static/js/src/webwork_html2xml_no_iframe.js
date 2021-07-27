@@ -1,4 +1,4 @@
-/* Javascript for WeBWorKXBlock. */
+/* Javascript for WeBWorKXBlock (html2xml and no iframe). */
 (function ($) {
     $.fn.serializeFormJSON = function () {
         var o = {};
@@ -17,11 +17,11 @@
     };
 })(jQuery);
 
-function WeBWorKXBlock(runtime, element) {
+function WeBWorKXBlockHtml2xmlNoIframe(runtime, element) {
 
-    var handlerUrl = runtime.handlerUrl(element, 'submit_webwork');
+    var handlerUrl = runtime.handlerUrl(element, 'submit_webwork_html2xml_no_iframe');
 
-    function handleResopnse(result) {
+    function handleResponse(result) {
         $("#edx_message").html("")
         $("#edx_webwork_result").html("")
         if (result.success){
@@ -46,8 +46,8 @@ function WeBWorKXBlock(runtime, element) {
             type: "POST",
             url: handlerUrl,
             data: JSON.stringify(form_data),
-            success: handleResopnse,
-            error: handleResopnse
+            success: handleResponse,
+            error: handleResponse
         });
         return 0;
     });

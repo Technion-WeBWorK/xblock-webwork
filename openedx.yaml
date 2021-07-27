@@ -1,0 +1,13 @@
+oeps:
+    oep-2: false
+    oep-7: false
+    oep-18: false
+
+tags:
+    - library
+    - xblock
+
+owner: taniwallach
+nick: webwork
+#supporting_teams:
+#  - masters-devs

@@ -1,0 +1,93 @@
+The main settings which are expected to provide access to a WeBWorK server
+for problem rendering and grading are expected to be stored in the
+"Other Course Settings" JSON dictionary which is available since the
+Ironwood release when the ENABLE_OTHER_COURSE_SETTINGS is set to true in the
+the cms.env.json file.
+
+The config data is included inside the main JSON object inside a single JSON
+object whose key is "webwork_settings".
+
+  * Required to level inner keys:
+    * "server_settings" whose value is a object whose keys are the IDs, and each
+      value is an object of the settings needed for that server.
+    * "course_defaults" whose value is a object whose key-value pairs set default
+      values for the current course.
+
+  * Fields in the "server_settings" object:
+      * Key = the "ww_server_id" which can be selected to use this group of settings.
+      * Value is a object containing at least the following required settings per server:
+        * "server_type" either "standalone" or "html2xml"
+        * "server_url" = the head portion of the URL where the API is.
+	  * Examples:
+	    * "https://myserver.mydomain.tld/webwork2/html2xml"
+	    * "https://myserver.mydomain.tld:3000/render-api"
+        * "auth_data" = object of key-value pairs needed for the authentication and
+	  secure communucations with the relevant server
+          * for "server_type" = "html2xml" this includes:
+	    * "ww_course", "ww_username", "ww_password"
+          * for "server_type" = "standalone" this inlcudes:
+	    * nothing at present. FIXME to handle JWT secret, auth settings, etc.
+  * Fields in the "course_defaults" object:
+    * "default_server" whose value is one of the entries in the prior array. (required)
+    * "default_show_answers" (boolean) should show answers be made available after
+      the relevant answer_delay.
+      (optional, default to true)
+    * "default_show_solutions" (boolean) should solutions (if they exist) be made available
+      after the relevant answer_delay.
+      (optional, default to true)
+    * "default_allow_hints" (boolean) should hints (if they exist) be permitted.
+      (optional, default to false)
+    * "default_post_deadline_lockdown" = # of minutes after the deadline during which
+       submissions are forbidden (except for the grace perion).
+       (optional, default to 2880 minutes = 48 hours)
+    * "default_answer_delay" = # of minutes after deadline when answers become
+       available to the students.
+       (optional, default to 2880 minutes = 48 hours)
+    * "default_html_lang" = default setting for the main LANG attribute inside the iFrame.
+       (optional, when not provided, the webwork server defaults will apply)
+    * "default_html_dir" = default setting for the main DIR attribute inside the iFrame.
+       (optional, when not provided, the webwork server defaults will apply)
+
+
+Sample config, which is included inside the main JSON object.
+
+{
+    "webwork_settings": {
+        "server_settings": {
+            "LocalStandAloneWW": {
+                "server_type": "standalone",
+                "server_url": "http://standalone.domain.tld:3000/render-api",
+                "auth_data": {}
+            },
+            "TechnionWW2": {
+                "server_type": "html2xml",
+                "server_url": "https://webwork.domain.tld/webwork2/html2xml",
+                "auth_data": {
+                    "ww_course": "daemon_course",
+                    "ww_username": "the_ww_daemon_course_username",
+                    "ww_password": "the_ww_daemon_course_password"
+                }
+            }
+        },
+        "course_defaults": {
+            "default_server": "LocalStandAloneWW",
+            "default_show_answers": true,
+            "default_show_solutions": false,
+            "default_allow_hints": false,
+            "default_post_deadline_lockdown": 1440,
+            "default_answer_delay": 2880,
+            "default_html_lang": "he",
+            "default_html_dir": "rtl"
+        }
+    }
+}
+
+
+References on the "Other course settings feature":
+  https://www.edunext.co/articles/discover-open-edx-ironwood
+  https://github.com/edx/edx-platform/pull/17699
+  https://openedx.atlassian.net/browse/OSPR-2303
+  https://github.com/edx/edx-documentation/pull/1702
+
+
+
