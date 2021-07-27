@@ -1,3 +1,7 @@
+**Later and ongoing development is in https://github.com/Technion-WeBWorK/xblock-webwork**
+
+---
+
 WeBWorK-PG XBlock
 =================
 An edX XBlock that uses WeBWorK's PG as its backend.
