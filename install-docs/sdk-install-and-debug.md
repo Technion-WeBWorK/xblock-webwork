@@ -50,7 +50,7 @@ Happy ending requires careful follow of the listed steps.
 * To make sure that the local webwork server runs correctly, execute the shell command:
     >firefox --new-window http://localhost:8080/webwork2/admin/
 
-# 3. installing Ofek webwork xblock
+# 3. installing the webwork xblock
 These instructions are based on the Edx instructions here:   
 [3.2 Set Up the XBlock Software Development Kit](https://edx.readthedocs.io/projects/xblock-tutorial/en/latest/getting_started/setup_sdk.html)  
 and the following chapter  
@@ -85,12 +85,10 @@ Change it to your needs when following the instructions
     pip install -r requirements/base.txt  
     cd ..
 
-5. Clone Ofek's webwork xblock:
-   >git clone https://github.com/tsabaryg/xblock-webwork.git  
-   * You will need to supply a git user and password with access permission.  
-   Contact guyts@technion.ac.il or tani@mathnet.technion.ac.il for permission request.
+5. Clone the webwork xblock:
+   > git clone https://github.com/Technion-WeBWorK/xblock-webwork.git
 
-6. Install Ofek's webwork xblock:
+6. Install the webwork xblock:
    > pip install -e xblock-webwork
 
 7. Create the SQLite Database([3.3.3](https://edx.readthedocs.io/projects/xblock-tutorial/en/latest/getting_started/create_first_xblock.html#create-the-sqlite-database:)).  

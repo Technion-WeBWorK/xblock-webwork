@@ -13,6 +13,9 @@ copy-paste in document up to need
 <span style="color:#f7f7f7">Faded text</span>  
 -->
 
+The goal of this guide is to help you set up an environment with the edX Docker
+based devstack with the webwork XBlock installed it in.
+
 ## 1. Hardware requirements
 An up-to-date developer computer of the last 3 years, with 16GB ram should suffice.
 
@@ -79,7 +82,7 @@ Here I arbitrarily chosen **XblockEx** directory name
 
 > echo "This stage requires good internet connection and will take few minutes:" && make dev.pull.large-and-slow  
 
-> echo "This is a very cpu-heavy stage and will take 30-60 minutes unless a very strong pc is used:" && make dev.provision  
+> echo "This is a very network/cpu intensive stage and will take 30-60 minutes unless a very strong pc is used:" && make dev.provision  
 
 > make dev.down
 ## 11. Verify correct installation
@@ -97,12 +100,10 @@ Here I arbitrarily chosen **XblockEx** directory name
 > cd ../edx-platform/  
 > mkdir src  
 > cd src  
-> git clone https://github.com/tsabaryg/xblock-webwork.git
+> git clone https://github.com/Technion-WeBWorK/xblock-webwork.git
 
-You will need to supply a git user+password with permission  
-Contact guyts@technion.ac.il or tani@mathnet.technion.ac.il for permission request.
 
-## 13. Add xblock-webwork to docker-compose.yml:  
+## 13. Add xblock-webwork to docker-compose.yml in a manner which will reinstall the code on each startup (necessary when development is being done):  
 > cd ~/XblockEx/edx-devstack/devstack  
 + Open docker-compose.yml with VS-Code or nano
 + Navigate in the file Under the line of  
@@ -115,7 +116,6 @@ Contact guyts@technion.ac.il or tani@mathnet.technion.ac.il for permission reque
             source /edx/app/edxapp/edxapp_env && 
             pip install ptvsd && 
             pip install /edx/app/edxapp/edx-platform/src/xblock-webwork/ && 
-            echo "tani-123" && 
             while true; do python /edx/app/edxapp/edx-platform/manage.py 
             lms runserver 0.0.0.0:18000 --settings devstack_docker;
             sleep 2; done'
@@ -129,7 +129,6 @@ Contact guyts@technion.ac.il or tani@mathnet.technion.ac.il for permission reque
             source /edx/app/edxapp/edxapp_env && 
             pip install ptvsd && 
             pip install /edx/app/edxapp/edx-platform/src/xblock-webwork/ && 
-            echo "tani-456" && 
             while true; do python /edx/app/edxapp/edx-platform/manage.py cms 
             runserver 0.0.0.0:18010 --settings devstack_docker; 
             sleep 2; done'
@@ -137,15 +136,16 @@ Contact guyts@technion.ac.il or tani@mathnet.technion.ac.il for permission reque
 + Save and exit
 
 ## 14. Enable the XBlock in Your Course:  
-  + > make dev.up
-  + <span style="color:#5cb85c">**navigate to loacalhost:18000**</span>  
+  + Typically it suffices to only start the LMS and Studio containers and their dependencies,
+  + > make dev.up.lms+studio
+  + <span style="color:#5cb85c">**navigate to localhost:18000**</span>  
   + Sign in into http://localhost:18000 with  
      > Login: staff@example.com  
      > Pass: edx  
   + Navigate in the browser to: Demonstration Course->view in studio->view live->view in studio
   + From the course Settings menu, select Advanced Settings:  
      <img src="Edx-Devstack-Settings.png" alt="drawing" width="500"/>
-  + In the Advanced Module List field, place your cursor between the braces, add comma and then type "webwork":  
+  + In the Advanced Module List field, place your cursor between the braces, add a comma and then type "webwork":  
       <img src="Edx-Devstack-Advanced-Module-List.png" alt="drawing" width="500"/>
   + Save the settings  
   + Navigate again to: Demonstration Course->view in studio->view live->view in studio
