@@ -27,8 +27,8 @@ edx-devstack environment pros-and-cons when compared with Open xblock-sdk enviro
 
 **Cons:**
 + Heavy disc/cash/cpu usage
-+ Though to install 
-+ Though to debug
++ Difficult to install
++ Challenging to debug
 + Thus remarkably slows down developing
 
 It assumes that the reader have basic experience working with  
@@ -39,16 +39,17 @@ It assumes that the reader have basic experience working with
 - Open edX's devstack services (lms/studio etc')
 - Docker containers.
 
-Following this tutorial up to a successful end, will arm you with the capabilities of running webwork-xblock in edx-devstack environment and debug it through VS-Code (set breakpoints, watch variable values etc') 
+Following this tutorial successful should set up an edx-devstack environment with a functional webwork-xblock allowing debugging using VS-Code (setting breakpoints, watch variable values etc.)
 
-Happy ending requires careful follow of the listed steps.
+Success requires carefully following the procedure.
 
 **Good luck!**
 
 # 2. Prerequisites
 1. Ubuntu + Python + virtualenv
 2. VS-Code with python + django + docker extension packs
-3. Access to technion webwork2 server (contact Nathan Wallach (tani@mathnet.technion.ac.il) to acquire Authenticated user+password
+3. Access to a either a WeBWorK Standalone renderer (https://github.com/drdrew42/renderer/) or a WeBWorK server (https://github.com/openwebwork/webwork2) running a daemon course.
+  - Our current code requires that the WeBWorK server has the modification to provide the standalone_style output mode for html2xml which is provided in a draft PR to the webwork2 project: https://github.com/openwebwork/webwork2/pull/1426
 
 # 3. installing Open edX Devstack
 These instructions are based on the Edx instructions here:   
@@ -81,7 +82,7 @@ Change it to your needs when following the instructions
    > make dev.up
 5. Verify all (17) containers are up (as opposed to Exited or othe state) with
    > docker ps -a
-   + Note: consider using the watch command in a new command shell in order to watch the containers state indefinitly:  
+   + Note: consider using the watch command in a new command shell in order to watch the containers state continuously:  
      >watch -n1 "docker ps -a"  
 6. Wait about 1-minute and check it out to work properly in your browser:  
     http://localhost:18000  
@@ -89,17 +90,15 @@ Change it to your needs when following the instructions
 
     > make dev.down
 
-7. Clone ofek’s xblock webwork into  
+7. Clone webwork xblock into  
    ~/XblockEx/edx-devstack/edx-platform/src/ :  
     >cd ../edx-platform/  
     mkdir src  
     cd src  
-    git clone https://github.com/tsabaryg/xblock-webwork.git  
-    * You will need to supply a git user and password with access permission.  
-    Contact guyts@technion.ac.il or tani@mathnet.technion.ac.il for permission request.
+    git clone https://github.com/Technion-WeBWorK/xblock-webwork.git
 
-8.  Improve docker-compose.yml to include xblock-webwork:  
-    > cd /home/guy/XblockEx/edx-devstack/devstack  
+8. Modify docker-compose.yml to reinstall the WeBWorK XBlock on each startup (necessary when development is being done to the code):  
+    > cd ~/XblockEx/edx-devstack/devstack
     + Open docker-compose.yml with VS-Code or nano
     + Navigate in the file Under the line of  
       lms: 
@@ -111,7 +110,6 @@ Change it to your needs when following the instructions
               source /edx/app/edxapp/edxapp_env && 
               pip install ptvsd && 
               pip install /edx/app/edxapp/edx-platform/src/xblock-webwork/ && 
-              echo "tani-123" && 
               while true; do python /edx/app/edxapp/edx-platform/manage.py 
               lms runserver 0.0.0.0:18000 --settings devstack_docker;
               sleep 2; done'
@@ -125,14 +123,15 @@ Change it to your needs when following the instructions
               source /edx/app/edxapp/edxapp_env && 
               pip install ptvsd && 
               pip install /edx/app/edxapp/edx-platform/src/xblock-webwork/ && 
-              echo "tani-456" && 
               while true; do python /edx/app/edxapp/edx-platform/manage.py cms 
               runserver 0.0.0.0:18010 --settings devstack_docker; 
               sleep 2; done'
 
     + Save and exit
+    + Typically it suffices to only start the LMS and Studio containers and their dependencies,
+      as done below instead of using a full `make dev.up`
     + Finally, check the docker-compose.yml update with the parenthesized=subshell command 
-       > (cd ~/XblockEx/edx-devstack/devstack/ && make dev.up)  
+       > (cd ~/XblockEx/edx-devstack/devstack/ && make dev.up.lms+studio)  
 
     + Wait about 1-minute and check it out to work properly in your browser: http://localhost:18000  
        <img src="Edx-Devstack-Entry-Page.png" alt="drawing" width="500"/>  
@@ -146,7 +145,7 @@ Change it to your needs when following the instructions
     + Navigate in the browser to: Demonstration Course->view in studio->view live->view in studio
     + From the course Settings menu, select Advanced Settings:  
        <img src="Edx-Devstack-Settings.png" alt="drawing" width="500"/>
-    + In the Advanced Module List field, place your cursor between the braces, add comma and then type "webwork":  
+    + In the Advanced Module List field, place your cursor between the braces, add a comma and then type "webwork":  
         <img src="Edx-Devstack-Advanced-Module-List.png" alt="drawing" width="500"/>
     + Save the settings  
     + Navigate again to: Demonstration Course->view in studio->view live->view in studio
@@ -192,19 +191,19 @@ These instructions are based on the
 4. In this new window, go to:
     + File > Open Workspace and open:  
     + /edx/app/edxapp/edx-platform/.vscode/edxapp-remote.code-workspace  
-    + Find the Python Extension in the “Local – Installed” panel, and (if not already locally installed)
-    + Click “Install on Attached Container”  
+    + Find the Python Extension in the "Local - Installed" panel, and (if not already locally installed)
+    + Click "Install on Attached Container"
 
 5. To test proper attachment of VS-Code to the LMS container:   
     + Open some wanted file in VS-Code for example
     + /edx/app/edxapp/edx-platform/lms/djangoapps/courseware/courses.py
     + Insert a breakpoint at a wanted place (here line 264):
       ![Alt](VS-Code-Devstack-LMS-Breakpoint.png) 
-    + Now switch to the browser and when clicking upon **LEARN MORE** of the demonstration course your breakpoint might be hitted:
+    + Now switch to the browser and when clicking upon **LEARN MORE** of the demonstration course your breakpoint might be hit:
     <img src="Firefox-Activate-Devstack-LMS-Breakpoint.png" alt="drawing" width="500"/>
 
 
-<span style="color:#5cb85c">**You are ready to start a Joyful debug of the LMS**</span>  
+<span style="color:#5cb85c">**You are ready to start debugging in the LMS**</span>  
 Alternatively, you can continue with the following instructions  
 to set debug capabilities for the STUDIO
 
@@ -236,9 +235,9 @@ to set debug capabilities for the STUDIO
     + File > Open Workspace  
       and scroll to open the workspace:  
     + /edx/app/edxapp/edx-platform/.vscode/edxapp-remote.code-workspace  
-    + Find the Python Extension in the “Local – Installed” panel  
+    + Find the Python Extension in the "Local - Installed" panel  
     and if not already locally installed 
-    + Click “Install on Attached Container”  
+    + Click "Install on Attached Container"
 
 4. To test proper attachment of VS-Code to the LMS container:   
     + Open some wanted file in VS-Code for example
@@ -247,10 +246,10 @@ to set debug capabilities for the STUDIO
       
     + Now open the browser in http://localhost:18000/dashboard and navigate/click  
        > Demonstration Course -> View in Studio -> View Live -> View in Studio
-       
-      and your breakpoint might be hitted:  
+
+      and your breakpoint might be hit:  
 ![Alt](VS-Code-Devstack-STUDIO-Breakpoint.png) 
 
 
-<span style="color:#5cb85c">**You are ready to start a Joyful debug of the STUDIO**</span>  
+<span style="color:#5cb85c">**You are ready to start debugging in STUDIO**</span>
 
