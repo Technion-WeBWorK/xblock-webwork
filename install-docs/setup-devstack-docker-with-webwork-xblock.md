@@ -13,6 +13,15 @@ copy-paste in document up to need
 <span style="color:#f7f7f7">Faded text</span>  
 -->
 
+
+**Warning:** Recent changes to the master branches of devstack and the edX codebase seem to interfere
+with using the "master" branches, which did work until relatively recently. For now, we recommend installing
+using a "named" release as explained in:
+https://github.com/Technion-WeBWorK/xblock-webwork/blob/edx-named-release-install/install-docs/setup-devstack-named-release-with-webwork-xblock.md
+and then following the instructions below to set up the debugging tools.
+
+---
+
 The goal of this guide is to help you set up an environment with the edX Docker
 based devstack with the webwork XBlock installed it in.
 
@@ -134,6 +143,19 @@ Here I arbitrarily chosen **XblockEx** directory name
             sleep 2; done'
 
 + Save and exit
+
+## Enable and use "Other course settings"
+
+You need to set up the capability to use "Other course settings" and make the necessary settings
+there, in order to get a fully functioning XBlock. That is needed to allow making the course-wide
+settings, so server settings need not be set for each problem (which is not recommended).
+
+See https://github.com/Technion-WeBWorK/xblock-webwork/blob/edx-named-release-install/install-docs/setup-devstack-named-release-with-webwork-xblock.md
+where that was done for an install of the "lilac" named release in a devstack.
+
+**Note:** Problems using `settings_type` "Manual settings" and directly providing all the
+corrrect server configuration will probably work without "Other course settings".
+That approach is **not** recommended.
 
 ## 14. Enable the XBlock in Your Course:  
   + Typically it suffices to only start the LMS and Studio containers and their dependencies,

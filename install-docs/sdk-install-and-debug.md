@@ -13,6 +13,12 @@ copy-paste in document up to need
 <span style="color:#f7f7f7">Faded text</span>  
 -->
 
+**Warning:** We have not used the XBlock SDK with the WeBWorK XBlock for a
+long time. Some features, in particular the course-level settings from
+"Other course settings" and settings related to deadlines, graceperiod,
+and probably more would not be available in the SDK. As a result, attempting
+to run the WeBWorK XBlock in the DSK is not recommended nor supported.
+
 # 1. Preliminaries
 This Tutorial should help the reader to install xblock-webwork into Open edX's limited xblock-sdk environment and debug it with VS-Code. Listed below xblock-sdk environment pros-and-cons when compared with Open edX-devstack environment:
 
