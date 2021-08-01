@@ -17,49 +17,45 @@ object whose key is "webwork_settings".
       * Key = the "ww_server_id" which can be selected to use this group of settings.
       * Value is a object containing at least the following required settings per server:
         * "server_type" either "standalone" or "html2xml"
-        * "server_url" = the head portion of the URL where the API is.
+        * "server_api_url" = the head portion of the URL where the API is.
 	  * Examples:
 	    * "https://myserver.mydomain.tld/webwork2/html2xml"
 	    * "https://myserver.mydomain.tld:3000/render-api"
+        * For html2xml servers, there is also
+            * "server_static_files_url" which is prepended to URLs in the generated HTML,
+              as the man-in-the-middle architecture of loading HTML into the iFrame does
+              would not send relative URLS to the WeBWorK server otherwise.
+              Example value: "https://myserver.mydomain.tld/webwork2_files".
         * "auth_data" = object of key-value pairs needed for the authentication and
 	  secure communucations with the relevant server
           * for "server_type" = "html2xml" this includes:
 	    * "ww_course", "ww_username", "ww_password"
-          * for "server_type" = "standalone" this inlcudes:
-	    * nothing at present. FIXME to handle JWT secret, auth settings, etc.
+            * which are the settings used to authenticate to the daemon course on the server
+          * for "server_type" = "standalone" this includes:
+            * "aud" (which needs to match `SITE_HOST` set in `render.conf` for the renderer)
+            * "problemJWTsecret"
   * Fields in the "course_defaults" object:
     * "default_server" whose value is one of the entries in the prior array. (required)
-    * "default_show_answers" (boolean) should show answers be made available after
-      the relevant answer_delay.
-      (optional, default to true)
-    * "default_show_solutions" (boolean) should solutions (if they exist) be made available
-      after the relevant answer_delay.
-      (optional, default to true)
-    * "default_allow_hints" (boolean) should hints (if they exist) be permitted.
-      (optional, default to false)
-    * "default_post_deadline_lockdown" = # of minutes after the deadline during which
-       submissions are forbidden (except for the grace perion).
-       (optional, default to 2880 minutes = 48 hours)
-    * "default_answer_delay" = # of minutes after deadline when answers become
-       available to the students.
-       (optional, default to 2880 minutes = 48 hours)
-    * "default_html_lang" = default setting for the main LANG attribute inside the iFrame.
-       (optional, when not provided, the webwork server defaults will apply)
-    * "default_html_dir" = default setting for the main DIR attribute inside the iFrame.
-       (optional, when not provided, the webwork server defaults will apply)
-
+    * "psvn_shift" (optional) a numeric shift to apply in the current course to PSVN values,
+      as for technical reasons for each user they are system-wide values and not course-wide
+      values.
+    * Additional default settings were under consideration, but have not yet been implemented.
 
 Sample config, which is included inside the main JSON object.
 
+```
 {
     "webwork_settings": {
         "server_settings": {
             "LocalStandAloneWW": {
                 "server_type": "standalone",
                 "server_url": "http://standalone.domain.tld:3000/render-api",
-                "auth_data": {}
+                "auth_data": {
+                    "aud": "http://standalone.domain.tld:3000",
+                    "problemJWTsecret": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                }
             },
-            "TechnionWW2": {
+            "RemoteHtml2xml": {
                 "server_type": "html2xml",
                 "server_url": "https://webwork.domain.tld/webwork2/html2xml",
                 "auth_data": {
@@ -71,23 +67,15 @@ Sample config, which is included inside the main JSON object.
         },
         "course_defaults": {
             "default_server": "LocalStandAloneWW",
-            "default_show_answers": true,
-            "default_show_solutions": false,
-            "default_allow_hints": false,
-            "default_post_deadline_lockdown": 1440,
-            "default_answer_delay": 2880,
-            "default_html_lang": "he",
-            "default_html_dir": "rtl"
+            "psvn_shift": 51
         }
     }
 }
-
+```
 
 References on the "Other course settings feature":
-  https://www.edunext.co/articles/discover-open-edx-ironwood
-  https://github.com/edx/edx-platform/pull/17699
-  https://openedx.atlassian.net/browse/OSPR-2303
-  https://github.com/edx/edx-documentation/pull/1702
-
-
+  - https://www.edunext.co/articles/discover-open-edx-ironwood
+  - https://github.com/edx/edx-platform/pull/17699
+  - https://openedx.atlassian.net/browse/OSPR-2303
+  - https://github.com/edx/edx-documentation/pull/1702
 
