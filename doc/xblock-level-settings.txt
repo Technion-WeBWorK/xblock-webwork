@@ -5,7 +5,7 @@ WAS GLOBAL - BEING REPLACED:
   SERVERTYPE
 
 "Global"
-  main_settings   = the JSON config data retreived from the course
+  main_settings   = the JSON config data retrieved from the course
 
 XBlock fields
 
@@ -23,52 +23,55 @@ XBlock fields
 
     For use when in manual mode - otherwise should be left as None and kept invisible
       server_type
-      server_url
+      server_api_url
+      server_static_files_url
       auth_data - when needed should be a JSON dictionary of the needed settings
         *** replacing 'ww_course', 'ww_username', 'ww_password' for html2xml mode
+        *** for standalone mode now needs 'aud' and 'problemJWTsecret'
         *** help data should explain what is needed or FIXME + promise to explain
 
   Problem - main settings
     problem = Path for WW problem file (as expected on the WW server)
-    max_allowed_score
+    max_allowed_score = Scores are scaled from the WeBWorK 0-1 range to 0-max_allowed_score.
     max_attempts
+    no_attempt_limit_required_attempts_before_show_answers = controls when to allow viewing answers when no deadline and unlimited attempts
+    weight = weight of problem in unit (edX standard field)
+    settings_type = controls whether to use course-wide settigs about the remote server or ones set by the problem
+    ww_server_id = which serverID to use from the course-wide settigs
+    ww_server_type, ww_server_api_url, ww_server_static_files_url, auth_data = problem specific server settings (not recommended, use course-wide settings instead)
 
   Problem - display related settings
+    ww_language = used to set the language of the translation dictionary to use on the WeBWorK side. (Currently only supported by html2xml as there are no dictionaries yet for the standalone renderer.)
+
+    # Probably do not need to be edited
     display_name
     iframe_min_height
     iframe_max_height
     iframe_min_width
-    unique_id
 
-  Problem - special settings - can be left as None
+  Problem - special settings - can usually be left with the default values
+    allow_show_answers
+    allow_ww_hints
+    allow_ww_solutions_with_correct_answers
+    problem_banner_text
+    webwork_request_timeout
+    post_deadline_lockdown
 
-    course_grace_period_minutes = # of minutes to allow after deadline - course level
-    problem_additional_grace_period_minutes = # of additional minutes for this problem
-    student_additional_grace_period_hours = # of additional hours for this student on all problems
-    student_problem_additional_grace_period_minutes = # of additional hours for this student on this problem
 
-    problem_answer_delay = # of minutes after deadline when answers become available, when set overrides the
-      course level default_answer_delay
-
-    problem_show_answers = should show answers be made available after the relevant answer_delay
-      To override the course wide default_show_answers
-    problem_answer_delay = # of minutes after deadline when answers become available, when set overrides the
-      course level default_answer_delay
-
-    problem_html_lang = overrode default_html_lang
-    problem_html_dir = overrode default_html_dir
-
-    custom_parameters
+    custom_parameters = for future use
 
   User state for problem:  (Scope.user_state)
     student_answer
-    student_attempts # CHANGE to be like WW
-      student_numCorrect
-      student_numIncorrect
-    student_score
+    student_attempts = total, but we also store ww_numCorrect, ww_numIncorrect (as Standalone uses them)
+    best_student_score
     seed
     psvn_index = index number of which PSVN to use for this instance of the problem
-      * Used to pull a value out of psvn_array
+      * Used to pull a value out of psvn_options (a Dict)
+    submission_data_to_save (answers, etc. which get saved)
+    student_viewed_correct_answers
+    unique_id (internal, used to prevent identify iFrames, divs, etc. of different problems)
+
+    done, last_submission_time - based on capa_module.py
 
     MAYBE:
       last_answer = WW format to allow reloading prior answers during initial rendering. Needs support on the standalone side
