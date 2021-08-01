@@ -5,7 +5,7 @@ Testing the WeBWorK XBlock requires:
 for the XBlock.
 
 The goal of this guide is to set up an functional test system using the Docker
-based edX devstack with the webwork XBlock installed it in, and a local install
+based edX devstack with the WeBWorK XBlock installed it in, and a local install
 of the WeBWorK standalone renderer.
 
 In order to make this test system reasonably stable, the devstack is being set
@@ -19,7 +19,7 @@ in the devstack.
 
 ## Hardware / software requirements
 
-The installation of the edx devstack depends on using Docker.
+The installation of the edX devstack depends on using Docker.
 
 The devstack requirements at https://github.com/edx/devstack#prerequisites
 lists Python 3.8 as a prerequisite, and Ubuntu 20.04 LTS provides this
@@ -45,7 +45,7 @@ We have been able to install the necessary portion of the devstack to test
 the XBlock and the additional components on a test system which had 16GB RAM
 using a Ubuntu partition of 50GB, and only about 30GB of disk space was used.
 However, that installation did not install the full devstack, only Studio
-and LMS and theie dependencies. A full devstack would certainly use more space.
+and LMS and their dependencies. A full devstack would certainly use more space.
 
 ## Assumptions in the process below.
 
@@ -115,7 +115,7 @@ The `docker` group was created to allow you to run Docker commands
 as your regular user. (This has security implications. See the Docker
 documentation.)
 
-That change is not fully active in your current login sesssion.
+That change is not fully active in your current login session.
 
 It is often easiest to log out and the log back in, so that the system will
 be aware that your user belongs to the `docker` group.
@@ -129,7 +129,7 @@ Test that docker is working (for the current user):
 ```
 # If necessary run:
 #           newgrp docker
-docker run hello-world  
+docker run hello-world
 # You should see the output from the test hello-world container.
 ```
 
@@ -138,9 +138,8 @@ docker run hello-world
 ### Primary sources:
 
 - The instructions below install under `~/XblockEx` which can be changed.
-- The official install instructions for devstack are at: 
+- The official install instructions for devstack are at:
   - https://github.com/edx/devstack
-0 
 - Documentation on install a named release of edX in the devstack are at
   - //github.com/edx/devstack/blob/master/docs/developing_on_named_release_branches.rst
   - **Warning:** The older instructions about this at https://edx.readthedocs.io/projects/edx-installing-configuring-and-running/en/open-release-hawthorn.master/installation/install_devstack.html are apparently somewhat outdated, and the order of several steps there seem to be **incorrect**.
@@ -150,11 +149,11 @@ WeBWorK XBlock.
 
 ### Setting OPENEDX_RELEASE for the future:
 
-Using devstack with a named release requires that the `OPENEDX_RELEASE` 
+Using devstack with a named release requires that the `OPENEDX_RELEASE`
 environment variable be set before various commands are run. This is necessary
 both for the installation process, and in later use.
 
-Thus, please add the `export OPENEDX_RELEASE=lilac.master` line (included 
+Thus, please add the `export OPENEDX_RELEASE=lilac.master` line (included
 in the steps below) into your `.bashrc` file (or whatever file/command is
 needed if you are using a different shell) either now or after completing the
 installation. That will make the correct setting of this environment variable
@@ -196,7 +195,7 @@ make dev.checkout
 ```
 
 The next step takes some time. Sometimes errors occur during the next step,
-and that indicated that some of the devstack Docker image failed to 
+and that indicated that some of the devstack Docker image failed to
 be downloaded / installed. This seems to be caused by network issues, and
 gets resolved by running the command again. Thus, if you got any error,
 please run the command again (possibly several times) until all images are
@@ -215,11 +214,11 @@ the Docker images are properly downloaded.
 
 ---
 
-** The next step is known to take quite a bit of time.** After starting it, you
+**The next step is known to take quite a bit of time.** After starting it, you
 probably want to go do something else for a while (probably at least half an
 hour).
 
-** Alternatively, you might want to try to run the "Standalone render"
+**Alternatively**, you might want to try to run the "Standalone render"
 installation from 2 sections down in parallel to the next command.
 
 ```
@@ -244,8 +243,8 @@ For the devstack, the setting seems to need to be set in 2 files, as explained
 below.
 
 You should run the following steps while the devstack is still running
-(so you can copy the files out of the running containers to make 
-persistant local copies to edit). Do so inside the Python virtualenv which 
+(so you can copy the files out of the running containers to make
+persistent local copies to edit). Do so inside the Python virtualenv which
 should still be running from the prior stage (or start up the venv again).
 
 ```
@@ -315,7 +314,7 @@ docker logs edx.devstack-lilac.master.lms
 
 Hopefully you will now be able to open http://localhost:18000 in your web
 browser and see something like:
-    <img src="Edx-Devstack-Entry-Page.png" alt="drawing" width="500"/>  
+    <img src="Edx-Devstack-Entry-Page.png" alt="drawing" width="500"/>
 
 ## Install the WeBWorK XBlock and configure devstack to load it
 
@@ -335,7 +334,7 @@ git clone https://github.com/Technion-WeBWorK/xblock-webwork.git
 Next we are going to edit the devstack `docker-compose.yml` file so
 the devstack will reinstall and load the XBlock each time the devstack is
 brought up. This is necessary if the code is being modified. (You can use a
-differerent editor instead of `vim` but be careful not to break the required
+different editor instead of `vim` but be careful not to break the required
 formatting of the files being edited.)
 
 
@@ -346,13 +345,13 @@ vim docker-compose.yml
 ```
 
 1. Find the "command" line in the "lms:" section of the file.
-2. Make the copy of the original line into a commented out line 
+2. Make the copy of the original line into a commented out line
 by adding a `#` at the start of the line.
 3. In the active "command" line add the string `pip install /edx/app/edxapp/edx-platform/src/xblock-webwork/ &&` just before the `while true`.
-  - The `pip install` we added should be between an old `&&` and the new one added here.
+   - The `pip install` we added should be between an old `&&` and the new one added here.
 4. Repeat this process in the "studio:" section of the file.
 
-**Note:** If you want to use the IDE debugging features discussed in 
+**Note:** If you want to use the IDE debugging features discussed in
 https://github.com/Technion-WeBWorK/xblock-webwork/blob/master/install-docs/devstack-install-and-debug.md
 you would also want to add `pip install ptvsd` in a similar manner.
 As this guide is not addressing IDE debugging, that additional install is not
@@ -366,8 +365,8 @@ make dev.up.lms+studio
 
 ## Install and configure a local installation of the WeBWorK standalone renderer
 
-This step is somewhat independed of the prior 2 steps, and could be done
-in parallel to them, so long as the additional network load will not 
+This step is somewhat independent of the prior 2 steps, and could be done
+in parallel to them, so long as the additional network load will not
 interfere with the other installation steps.
 
 ### Installation:
@@ -415,20 +414,20 @@ work.
     the Standalone renderer side from a string, we recommend using only 7-bit
     ASCII characters, to avoid any problems with character-set related
     conversions leading to the value not being properly received.
-  - For the sample testing, please use 
+  - For the sample testing, please use
     `problemJWTsecret => 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'` or make sure to
-     set the same value in this file and in the configration later added to 
+     set the same value in this file and in the configuration later added to
      the "Other course settings" in edX Studio.
 
 **Warning:** for local use of the Standalone renderer with edX devstack
 on a single computer, you should **not** replace the value of `SITE_HOST`
 in the `render_app.conf` file. It should remain `http://localhost:3000` as
-your browser will be loading auxilliary files needed by WeBWorK problems from
+your browser will be loading auxiliary files needed by WeBWorK problems from
 there. However, in production use, that value should be changed, and then
 the `aud` setting provided to the edX system via "Other course settings"
 should also be modified in the same manner.
 
-Now create a `docker-compose.yml` file for the Standaline renderer.
+Now create a `docker-compose.yml` file for the Standalone renderer.
 Create a file containing the following text:
 ```
 version: '3.5'
@@ -478,7 +477,7 @@ start the renderer after starting up the devstack.
 http://localhost:3000 to see the "local editor" provided by the Standalone
 renderer. Pull request https://github.com/drdrew42/renderer/pull/62
 is intended to close that for "production" mode, so once that gets merged
-some additional configuration will apparently be necessary to reanable that
+some additional configuration will apparently be necessary to reenable that
 feature on the Docker installed Standalone renderer.
 
 ## Configuring the demo course to use the XBlock, and testing a WeBWorK problem
@@ -489,12 +488,12 @@ devstack and Standalone renderer are both up a running.
 ### Configuration:
 
 1. Open in your web browser the page http://localhost:18010/settings/advanced/course-v1:edX+DemoX+Demo_Course
-2. Log in (using devstack defaults) as: `staff@example.com` with the password `esx`
+2. Log in (using devstack defaults) as: `staff@example.com` with the password `edx`
 3. You should be able to scroll down and find the "Other Course Settings" section.
-  - If you are in the settings and it is not there, something went wrong with the changes to enable this feature, either in the `etc/studio.yml` file or in how it was mounted into the Docker container.
-  - If you did not yet stop and restart the containers, that could be the cause of this special section of settings being missing.
+   - If you are in the settings and it is not there, something went wrong with the changes to enable this feature, either in the `etc/studio.yml` file or in how it was mounted into the Docker container.
+   - If you did not yet stop and restart the containers, that could be the cause of this special section of settings being missing.
 4. If you find the "Other Course Settings" section, replace the content with that listed below.
-  - On a production server, if there are already settings, you would need to add the content of the enclosing JSON object into the existing settings, as a new top level key/value pair.
+   - On a production server, if there are already settings, you would need to add the content of the enclosing JSON object into the existing settings, as a new top level key/value pair.
 5. Scroll to find the "Advanced Module List" on this page.
 6. Add "webwork" to the list (by adding `"webwork"` and adding the comma where it is needed).
    <img src="Edx-Devstack-Advanced-Module-List.png" alt="drawing" width="500"/>
