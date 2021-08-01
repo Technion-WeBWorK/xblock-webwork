@@ -40,9 +40,9 @@ The necessary settings for a server should be set provided using the course's "O
 
 ## Installation
 
-For installation instructions in an edX devstack on the "lilac" named release see: https://github.com/Technion-WeBWorK/xblock-webwork/blob/edx-named-release-install/install-docs/setup-devstack-named-release-with-webwork-xblock.md . Those settings were tested on July 30, 2021 and were used to bring up a new test system.
+For installation instructions in an edX devstack on the "lilac" named release see: https://github.com/Technion-WeBWorK/xblock-webwork/blob/master/install-docs/setup-devstack-named-release-with-webwork-xblock.md . Those settings were tested on July 30, 2021 and were used to bring up a new test system.
 
-Older instructions for installing in the "master" branch of devstack are in the directory https://github.com/Technion-WeBWorK/xblock-webwork/blob/edx-named-release-install/install-docs/ but are not fully updated. In particular, they are missing instructions on enabling the "Other course settings" option and using it to configure the XBlock course-wide settings.
+Older instructions for installing in the "master" branch of devstack are in the directory https://github.com/Technion-WeBWorK/xblock-webwork/blob/master/install-docs/ but are not fully updated. In particular, they are missing instructions on enabling the "Other course settings" option and using it to configure the XBlock course-wide settings.
 
 **Warning:** The "master" branch of devstack also is making a transition from the "old" LMS system to new services, and that apparently may cause some problems with the instructions, which worked before those changes.
 
@@ -92,5 +92,5 @@ Older instructions for installing in the "master" branch of devstack are in the 
   * Requests send only the necessary data to render/grade a problem to the back-end.
   * For grading of answers, this includes whatever data a student typed into the input boxes of a WeBWorK question.
 
-Additional information on the design can be found in https://github.com/Technion-WeBWorK/xblock-webwork/blob/edx-named-release-install/doc/Design.md
+Additional information on the design can be found in https://github.com/Technion-WeBWorK/xblock-webwork/blob/master/doc/Design.md
 

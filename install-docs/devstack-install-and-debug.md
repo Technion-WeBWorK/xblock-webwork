@@ -16,7 +16,7 @@ copy-paste in document up to need
 **Warning:** Recent changes to the master branches of devstack and the edX codebase seem to interfere
 with using the "master" branches, which did work until relatively recently. For now, we recommend installing
 using a "named" release as explained in:
-https://github.com/Technion-WeBWorK/xblock-webwork/blob/edx-named-release-install/install-docs/setup-devstack-named-release-with-webwork-xblock.md
+https://github.com/Technion-WeBWorK/xblock-webwork/blob/master/install-docs/setup-devstack-named-release-with-webwork-xblock.md
 and then following the instructions below to set up the debugging tools.
 
 ---
@@ -167,7 +167,7 @@ Change it to your needs when following the instructions
 10. You need to set up the capability to use "Other course settings" and make the necessary settings
 there, in order to get a fully functioning XBlock. That is needed to allow making the course-wide
 settings, so server settings need not be set for each problem (which is not recommended).
-See https://github.com/Technion-WeBWorK/xblock-webwork/blob/edx-named-release-install/install-docs/setup-devstack-named-release-with-webwork-xblock.md
+See https://github.com/Technion-WeBWorK/xblock-webwork/blob/master/install-docs/setup-devstack-named-release-with-webwork-xblock.md
 
 # 4.  Debug the webwork-xblock in Lms/Studio containers with VS-Code
 These instructions are based on the  

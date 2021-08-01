@@ -17,7 +17,7 @@ copy-paste in document up to need
 **Warning:** Recent changes to the master branches of devstack and the edX codebase seem to interfere
 with using the "master" branches, which did work until relatively recently. For now, we recommend installing
 using a "named" release as explained in:
-https://github.com/Technion-WeBWorK/xblock-webwork/blob/edx-named-release-install/install-docs/setup-devstack-named-release-with-webwork-xblock.md
+https://github.com/Technion-WeBWorK/xblock-webwork/blob/master/install-docs/setup-devstack-named-release-with-webwork-xblock.md
 and then following the instructions below to set up the debugging tools.
 
 ---
@@ -150,7 +150,7 @@ You need to set up the capability to use "Other course settings" and make the ne
 there, in order to get a fully functioning XBlock. That is needed to allow making the course-wide
 settings, so server settings need not be set for each problem (which is not recommended).
 
-See https://github.com/Technion-WeBWorK/xblock-webwork/blob/edx-named-release-install/install-docs/setup-devstack-named-release-with-webwork-xblock.md
+See https://github.com/Technion-WeBWorK/xblock-webwork/blob/master/install-docs/setup-devstack-named-release-with-webwork-xblock.md
 where that was done for an install of the "lilac" named release in a devstack.
 
 **Note:** Problems using `settings_type` "Manual settings" and directly providing all the
