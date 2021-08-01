@@ -46,15 +46,15 @@ def is_requirement(line):
 setup(
     name='webwork-xblock',
     version='0.1',
-    description='WeBWorK XBlock',   # TODO: write a better description.
-    license='UNKNOWN',          # TODO: choose a license
+    description='WeBWorK XBlock - supports embedding WeBWorK problems in edX courses',
+    license='Affero GNU General Public License v3 (AGPL)',
+    url='https://github.com/Technion-WeBWorK/xblock-webwork',
     classifiers=[
         'Classifier: Development Status ::  - Beta',
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.8',
         'Framework :: Django',
         'Framework :: Django :: 2.2',

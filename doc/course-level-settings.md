@@ -49,7 +49,7 @@ Sample config, which is included inside the main JSON object.
         "server_settings": {
             "LocalStandAloneWW": {
                 "server_type": "standalone",
-                "server_url": "http://standalone.domain.tld:3000/render-api",
+                "server_api_url": "http://standalone.domain.tld:3000/render-api",
                 "auth_data": {
                     "aud": "http://standalone.domain.tld:3000",
                     "problemJWTsecret": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -57,7 +57,8 @@ Sample config, which is included inside the main JSON object.
             },
             "RemoteHtml2xml": {
                 "server_type": "html2xml",
-                "server_url": "https://webwork.domain.tld/webwork2/html2xml",
+                "server_api_url": "https://webwork.domain.tld/webwork2/html2xml",
+                "server_static_files_url": "https://webwork.domain.tld/webwork2_files",
                 "auth_data": {
                     "ww_course": "daemon_course",
                     "ww_username": "the_ww_daemon_course_username",
