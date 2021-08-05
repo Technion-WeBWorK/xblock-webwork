@@ -42,8 +42,18 @@ import six
 import pytz # python timezone
 from pytz import utc
 from xblock.core import XBlock
-from django.utils.translation import ugettext_lazy as _
-from django.utils import translation # FIXME remove after debug i18n-try1 branch
+
+from django.utils.translation import ugettext_lazy as _ # pylint: disable=import-error
+
+# Use of ugettext_lazy for a default Field value makes it impossible to copy units with the XBlock.
+# The same issue in a different XBlock is discussed at https://github.com/mitodl/edx-sga/issues/252
+# and was patched for that XBlock in https://github.com/mitodl/edx-sga/pull/254 .
+# Their fix replaced "import ugettext_lazy" with "import ugettext" above for _ totally.
+# We want to keep ugettext_lazy for help strings, so instead add:
+from django.utils.translation import ugettext as non_lazy_ugettext # pylint: disable=import-error
+
+# from django.utils import translation # FIXME remove after debug i18n-try1 branch
+
 from xblock.fields import String, Scope, Integer, List, Dict, Float, Boolean, DateTime, UNIQUE_ID
 from xmodule.fields import Date
 from xblock.validation import ValidationMessage
@@ -623,7 +633,15 @@ class WeBWorKXBlock(
     # https://github.com/edx/edx-platform/blob/831f907c799917ab5fff4661111f7a52f9863be5/common/lib/xmodule/xmodule/capa_module.py
     display_name = String(
        display_name = _("Display Name"),
-       default = _("WeBWorK Problem"),
+       # Using ugettext_lazy on the default value below makes it impossible to copy
+       # units where the default value is still set.
+       # Error from stacktrace is
+       # bson.errors.InvalidDocument: cannot encode object: 'WeBWorK Problem', of type: <class 'django.utils.functional.lazy.<locals>.__proxy__'>
+       # See https://github.com/mitodl/edx-sga/issues/252 and https://github.com/mitodl/edx-sga/pull/254
+       # for a discussion about a similar error in SGA XBlock.
+       # Since we want to continue to enable lazy translations of the help strings,
+       # we use non_lazy_ugettext
+       default = non_lazy_ugettext("WeBWorK Problem"),
        scope = Scope.settings,
        help = _("Display name which appears in the control bar above the content in Studio view.") # Where else?
        #help=_("This name appears in the horizontal navigation at the top of the page."),
@@ -631,7 +649,8 @@ class WeBWorKXBlock(
 
     problem_banner_text = String(
        display_name = _("Problem Banner Text"),
-       default = _("WeBWorK Problem"),
+       # non_lazy_ugettext also here
+       default = non_lazy_ugettext("WeBWorK Problem"),
        scope = Scope.settings,
        help=_("This text appears as an H3 header above the problem."),
     )
@@ -1838,4 +1857,4 @@ class WeBWorKXBlock(
         fragment.initialize_js('WebWorkXBlockInitStudio')
 
         return fragment
-        
+
