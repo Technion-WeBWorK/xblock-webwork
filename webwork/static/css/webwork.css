@@ -1,7 +1,11 @@
 /* CSS for WeBWorKXBlock */
 
-
 div.webwork_block {
     border:2px solid black;
     padding: 4px;
+}
+
+div.webwork_iframe_container {
+    width: calc(100% - 12px);
+    padding: 0px;
 }
