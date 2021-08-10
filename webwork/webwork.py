@@ -1092,7 +1092,7 @@ class WeBWorKXBlock(
             request.pop(key, None)
 
     def request_webwork_html2xml(self, params):
-        # html2xml uses HTTP GET
+        # html2xml can use HTTP GET or POST. POST is more secure
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
         my_timeout = max(self.webwork_request_timeout,0.5)
         my_url = self.current_server_settings.get("server_api_url")
@@ -1100,7 +1100,7 @@ class WeBWorKXBlock(
         my_res = None
         if my_url:
             try:
-                my_res = requests.get(my_url, params=dict(
+                my_res = requests.post(my_url, data=dict(
                         params,
                         courseID=my_auth_data.get('ww_course','error'),
                         userID=my_auth_data.get('ww_username','error'),
@@ -1182,7 +1182,7 @@ class WeBWorKXBlock(
         if my_url:
             try:
                 my_res = requests.post(my_url,
-                    params=dict(params,
+                    data=dict(params,
                         # standalone does not have course/user/password
                         # The following fields are not in the JWT and should only be there
                         #problemSeed=str(self.seed),
