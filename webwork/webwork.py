@@ -251,6 +251,43 @@ STANDALONE_RESPONSE_PARAMETERS_SHOWCORRECT = dict(STANDALONE_RESPONSE_PARAMETERS
     "showCorrectAnswers": "Show Correct Answers"
 })
 
+# The keys in STANDALONE_ADD_INTO_JWT and in STANDALONE_MOVE_INTO_JWT
+# are setting in the Standalone API which we do not want anyone to be able
+# to set (tamper with) using form parameters and a valid JWT they obtained
+# in some manner or another.
+# 1. The ones in STANDALONE_ADD_INTO_JWT are settings which are not used by
+#    this XBlock, so we will just add them into the JWT claims.
+# 2. The ones in STANDALONE_MOVE_INTO_JWT are expected to be set by the XBlock,
+#     so the code will add the desired values for each key from params, and
+#     fall back to using the fixed settings if no value was provided by params.
+STANDALONE_ADD_INTO_JWT = {
+    "problemSourceURL": "", # empty string is treated by Perl as false, so does not have an effect
+    "problemSource": ""     # on the renderer behavior but will prevent override outside JWT.
+}
+
+# Note for testing the JWT lockdown on changes:
+#   Commenting out the outputFormat line in STANDALONE_MOVE_INTO_JWT below,
+#   and also the line to tamper with that value in request_webwork_standalone
+#   will let such tampering occur and be observed. Uncommenting the line here
+#   will block the effect of that tampering.
+# That establishes that the tamper resistence mechanism in the XBlock and the
+# handling by the Standalone renderer are working as intended.
+
+STANDALONE_MOVE_INTO_JWT = { # values we use and want to protect from tampering outside the JWT
+                             # if someone obtains a valid JWT to use
+    "numCorrect": "",
+    "numIncorrect": "",
+    "format" : "json",
+    "outputFormat": "simple",
+    "permissionLevel": "0", # Student level permissions
+    "showSummary": "1",
+    "showComments": "0",
+    "showHints": "0", # Default to off
+    "showSolutions": "0", # Default to off
+    "includeTags": "0"
+}
+
+
 # =========================================================================================
 
 # Fields from the answer hash data we want to save
@@ -1138,14 +1175,27 @@ class WeBWorKXBlock(
             #logger.info( "Failed to get JWT setup data" )
             return None
 
-        # Fixme - this is just a test
-        # Create dict of claims
+        # Create dict of initial claims
         my_claims = {
             'aud' : str(my_aud),
             'problemSeed': str(self.seed),
             'psvn' : str(self.get_psvn()),
             'sourceFilePath' : str(self.problem)
         }
+
+        # Add protected data to JWT so it cannot be tampered with if someone tried to call the API
+        # with a JWT they obtained which we generated, but with form data trying to override one
+        # or more of the protected settings.
+
+        # Forced values for options which we do not use, and do now want anyone to be able to add
+        my_claims.update( STANDALONE_ADD_INTO_JWT )
+
+        # Protect settings we expect to use and want to protect from tampering
+        for i in STANDALONE_MOVE_INTO_JWT.keys():
+            # use either the value params requested of the value from the defaults
+            my_claims.update( { i: params.get(i, STANDALONE_MOVE_INTO_JWT.get(i,"")) } )
+
+        #logger.info("Claims for JWT are {claims}".format(claims=json.dumps(my_claims)))
 
         try:
             # Create the base64_urlencoded format needed by jwcrypto
@@ -1165,7 +1215,7 @@ class WeBWorKXBlock(
         # Standalone uses HTTP POST
         # See https://requests.readthedocs.io/en/master/user/quickstart/#make-a-request
         # and outputFormat set to "simple" and format set to "json".
-        # Check by examining form parameters from Rederly UI on "render" call.
+        # Check by examining form parameters from standalone renderer editor UI on "render" call.
         my_timeout = max(self.webwork_request_timeout,0.5)
         my_url = self.current_server_settings.get("server_api_url")
         my_res = None
@@ -1175,6 +1225,19 @@ class WeBWorKXBlock(
             ##logger.info( my_jwt )
             params.update( { "problemJWT": str(my_jwt) } )
             params.pop("auth_data", None)
+
+            # The commented out line below was used to test that a request
+            # cannot override value in JWT by modifying values which we protected
+            # by including them in the JWT.
+            # When the line below is uncommented, it should NOT have an
+            # effect on the renderered problems. However, if the line to include
+            # outputFormat inside the STANDALONE_MOVE_INTO_JWT is commented out, then
+            # it will have an effect and the "Show correct answers" button will
+            # not be displayed.
+
+            #params.update( { "outputFormat": "classic" } )
+
+            # End of section to test JWT settings being tamper resistent.
         else:
             #logger.info( 'error making JWT.' )
             return None
