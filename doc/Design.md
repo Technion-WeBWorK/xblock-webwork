@@ -60,7 +60,7 @@ However, as certain types of WeBWorK problems can depend on a `psvn` parameter, 
 * The most critical method is `submit_webwork_iframed` which handles all the AJAX calls from the client side.
   * It contains the logic to determine what actions are permitted and to carry them out by making a suitable call the the external WeBWorK problem renderer.
   * It managed parsing the reply from the back-end server and preparing the reply to send to the end user's browser.
-  * This code is quite detailed to cover all the deadline/attenmpts state conditions which determine when a given action request is permitted.
+  * This code is quite detailed to cover all the deadline/attempts state conditions which determine when a given action request is permitted.
   * Other than initial setup, the code handles both possible back-end server types at once.
 
 * Messages are generated to display the current and recorded best score, the number of attempts allowed and used so far, etc.
@@ -70,13 +70,13 @@ However, as certain types of WeBWorK problems can depend on a `psvn` parameter, 
 
 * Data on submitted answers will be stored using the extended `CSMH` in a similar manner to standard Open edX problems.
   * The XBlock code attempts to carefully select which answer related data provided by the WeBWorK server is persisted, and uses Python dictionaries to collect the names of keys to be saved.
-  * At present it is necessary to make 2 very small modifications to enable the WeBWorK XBlock to use that facility, on to enable storing the data, and one to automatically enable course staff to view the submissions using the same preexisting facilty as used by `problem`.
+  * At present it is necessary to make 2 very small modifications to enable the WeBWorK XBlock to use that facility, one to enable storing the data, and one to automatically enable course staff to view the submissions using the same preexisting facilty used by `problem`.
   * A small change to make configuring which XBlocks can use those feature via the system configuration files was developed.
      * We intend to submit a pull request with those small changes to the core project.
   * Some experimentation was done with persisting the submissions using the `submissions` API, and commented out code to use that alternative was left in the code for possible use in the future.
 
 * The `student_view` method and the main `html` fragment file and `js` file are quite small, as problem loading is done via an AJAX call similar to that used to submit answers, etc.
-  * There is a capability to display some debugging information colleced into a JSON object in this method, and commented out sample code.
+  * There is a capability to display some debugging information collected into a JSON object in this method, and commented out sample code.
 
 ## Additional technical details
 
