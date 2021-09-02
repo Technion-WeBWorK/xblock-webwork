@@ -135,13 +135,18 @@ docker run hello-world
 
 ## Install the edX devstack for the lilac named release.
 
+We have tested these instructions for the "lilac" release.
+
+We also have tested that a similar process works for the "koa" release,
+where "koa" is used to replace "lilac" in many places in the process.
+
 ### Primary sources:
 
 - The instructions below install under `~/XblockEx` which can be changed.
 - The official install instructions for devstack are at:
   - https://github.com/edx/devstack
-- Documentation on install a named release of edX in the devstack are at
-  - //github.com/edx/devstack/blob/master/docs/developing_on_named_release_branches.rst
+- Documentation on installing a named release of edX in the devstack are at
+  - https://github.com/edx/devstack/blob/master/docs/developing_on_named_release_branches.rst
   - **Warning:** The older instructions about this at https://edx.readthedocs.io/projects/edx-installing-configuring-and-running/en/open-release-hawthorn.master/installation/install_devstack.html are apparently somewhat outdated, and the order of several steps there seem to be **incorrect**.
 - However, in order to save on resources, this guide does not install a full
 devstack, and only installs the portions needed for using and testing the
