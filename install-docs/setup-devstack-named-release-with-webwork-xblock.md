@@ -160,9 +160,10 @@ both for the installation process, and in later use.
 
 Thus, please add the `export OPENEDX_RELEASE=lilac.master` line (included
 in the steps below) into your `.bashrc` file (or whatever file/command is
-needed if you are using a different shell) either now or after completing the
+needed if you are using a different shell) **after** completing the
 installation. That will make the correct setting of this environment variable
-automatically each time you open a new terminal, etc.
+automatically each time you open a new terminal, etc. (If the value is set before
+the install process, one step below failed, so the value is unset before that step.)
 
 **Note:** If you are working with multiple devstacks, you will need to set
 the `OPENEDX_RELEASE` variable suitably when changing between devstacks.
@@ -189,8 +190,18 @@ git clone https://github.com/edx/devstack.git
 cd devstack
 
 make requirements
-make dev.clone.https
+```
 
+The `make dev.clone.https` step seems to work only when OPENEDX_RELEASE is NOT set (or at least not when it is set to "koa.master"), so unset it first:
+
+```
+export OPENEDX_RELEASE=
+make dev.clone.https
+```
+
+Hence, we set the value of `OPENEDX_RELEASE` below (after the prior step).
+
+```
 # Change NOW to use the "lilac" named release:
 git checkout open-release/lilac.master
 export OPENEDX_RELEASE=lilac.master
@@ -456,12 +467,17 @@ services:
 
     ports:
       - "3000:3000"
+
+    environment:
+      MOJO_MODE: development
+
 ```
 
 The "special" settings made here are:
   1. Attaching the Standalone render to the Docker `devstack-lilacmaster_default` network, which is the Docker network devstack will use the "lilac" named release.
   2. Naming the container as "wwstandalone" which will be used also in the "Other course settings" configuration on the edX side.
   3. Using the local `render_app.conf` we just created.
+  4. Setting the `MOJO_MODE` to `development` so localhost:3000 gives the Standalone developer's web interface (which is not available in production mode).
 
 ### How to start/stop the renderer
 
