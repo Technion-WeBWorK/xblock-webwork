@@ -40,7 +40,7 @@ import requests # Ease the contact with webwork server via HTTP/1.1
 import pkg_resources # Used here to return resource name as a string
 import six
 import pytz # python timezone
-from pytz import utc
+from pytz import UTC
 from xblock.core import XBlock
 
 from django.utils.translation import ugettext_lazy as _ # pylint: disable=import-error
@@ -430,7 +430,10 @@ class WeBWorKXBlock(
         return self._grace_timedelta
 
     def set_problem_period(self):
-        Now = datetime.datetime.now(datetime.timezone.utc)
+        # ----Ginkgo
+        # Now = datetime.datetime.now(datetime.timezone.utc)
+        Now = datetime.datetime.now(UTC)
+        #----Ginkgo
         self.set_due_date()
         DueDate = self.due
         GraceDuration = self.grace_timedelta
@@ -961,7 +964,8 @@ class WeBWorKXBlock(
         """
         Set the module's last submission time (when the problem was submitted)
         """
-        self.last_submission_time = datetime.datetime.now(utc)
+        # --- Ginkgo - change to UTC
+        self.last_submission_time = datetime.datetime.now(UTC)
     # ----------- End of fields and code copied from capa_module.py -----------
 
 
