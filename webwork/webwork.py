@@ -63,7 +63,15 @@ from xblockutils.studio_editable import StudioEditableXBlockMixin
 from xblock.scorable import ScorableXBlockMixin, Score
 from xblock.completable import XBlockCompletionMode
 from cms.djangoapps.models.settings.course_grading import CourseGradingModel
-from enum import IntFlag, unique
+# -------------------Start of Ginkgo-----
+# ----------------
+# The following import for python 3.8 works:
+#    from enum import Enum, unique
+# But for python 2.7 (Ginkgo) we need to manually provide a backported IntFlag
+from enum import unique
+from IntFlagBackport import IntFlag
+# -------------------End of Ginkgo-------
+
 from xmodule.util.duedate import get_extended_due_date
 
 # The recommended manner to format datetime for display in Studio and LMS is to use:
