@@ -61,9 +61,12 @@ from web_fragments.fragment import Fragment
 from webob.response import Response # Uses WSGI format(Web Server Gateway Interface) over HTTP to contact webwork
 from xblockutils.studio_editable import StudioEditableXBlockMixin
 from xblock.scorable import ScorableXBlockMixin, Score
-from xblock.completable import XBlockCompletionMode
-from cms.djangoapps.models.settings.course_grading import CourseGradingModel
 # -------------------Start of Ginkgo-----
+# The next import does not work in Ginkgo and is not really used:
+#from xblock.completable import XBlockCompletionMode
+# ---
+# The next import does not work in Ginkgo. Without it gradeperiod is being forces to None:
+# from cms.djangoapps.models.settings.course_grading import CourseGradingModel
 # ----------------
 # The following import for python 3.8 works:
 #    from enum import Enum, unique
@@ -74,8 +77,11 @@ from IntFlagBackport import IntFlag
 
 from xmodule.util.duedate import get_extended_due_date
 
+# -------------------Start of Ginkgo-----
 # The recommended manner to format datetime for display in Studio and LMS is to use:
-from common.djangoapps.util.date_utils import get_default_time_display
+# Ginkgo - this import is not working. FIXME
+# from common.djangoapps.util.date_utils import get_default_time_display
+# -------------------End of Ginkgo-------
 
 # Need to support making an encrypted JWT for use by the Standalone renderer
 from jwcrypto import jwt, jwk
@@ -402,7 +408,11 @@ class WeBWorKXBlock(
     @property
     def grace_timedelta(self): #plays both as getter and setter
         try:
-            graceperiod = CourseGradingModel.fetch(self.course.id).grace_period
+            #-----Ginkgo fix: We are not able to get grace_period as the import is not working.
+            # so we are just setting it to None
+            graceperiod = None
+            # graceperiod = CourseGradingModel.fetch(self.course.id).grace_period
+            #-----Ginkgo fix
         except AttributeError:
             graceperiod = None
 
@@ -431,7 +441,12 @@ class WeBWorKXBlock(
 
             # The formatting in the next line should be locale dependent, so we use
             # get_default_time_display()
-            self.formatted_lock_date_end = get_default_time_display(self.lock_date_end)
+            #-------Ginkgo issue: we are not able to
+            #    import from common.djangoapps.util.date_utils
+            # at present so we cannot use get_default_time_display below.
+            # Temporarily set a fake string for self.formatted_lock_date_end
+            # self.formatted_lock_date_end = get_default_time_display(self.lock_date_end)
+            self.formatted_lock_date_end = 'bug!!! must fix'
 
             if Now < self.lock_date_begin:
                 self.problem_period = PPeriods.PreDue
