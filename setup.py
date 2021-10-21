@@ -45,7 +45,7 @@ def is_requirement(line):
 
 setup(
     name='webwork-xblock',
-    version='0.1',
+    version='0.0.9', # This branch is for Ginkgo (python 2.7) and is being called version 0.0.9
     description='WeBWorK XBlock - supports embedding WeBWorK problems in edX courses',
     license='Affero GNU General Public License v3 (AGPL)',
     url='https://github.com/Technion-WeBWorK/xblock-webwork',
@@ -54,8 +54,8 @@ setup(
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
         'Operating System :: OS Independent',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
         'Framework :: Django',
         'Framework :: Django :: 2.2',
     ],
