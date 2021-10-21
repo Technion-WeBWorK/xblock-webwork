@@ -1943,8 +1943,10 @@ class WeBWorKXBlock(
 
 
         # Initialize the choices
-        fragment = super().studio_view(context)
-
+        #-----Ginkgo needs parameters for super
+        fragment = super(WeBWorKXBlock, self).studio_view(context)
+        # fragment = super().studio_view(context)
+        #---Ginkgo
         fragment.add_javascript(self.resource_string("static/js/xblock_studio_view.js"))
 
         fragment.initialize_js('WebWorkXBlockInitStudio')
