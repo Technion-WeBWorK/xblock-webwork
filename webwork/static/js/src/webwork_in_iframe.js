@@ -11,6 +11,14 @@ function WeBWorKXBlockIframed(runtime, element, initdata) {
 
     console.log("handlerUrl is ", handlerUrl);
 
+    iFrameResize( {
+       checkOrigin: false,
+       scrolling: true,
+       minHeight: initdata.iframe_min_height,
+       maxHeight: initdata.iframe_max_height,
+       minWidth:  initdata.iframe_min_width
+       }, "#" + initdata.rpID );
+
     let problemiframe = document.getElementById(initdata.rpID);
     let messageDiv = document.getElementById(initdata.messageDivID);
     let resultDiv = document.getElementById(initdata.resultDivID);

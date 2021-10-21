@@ -1412,13 +1412,11 @@ class WeBWorKXBlock(
         #    debug_data = "error"
 
         iframe_id = 'rendered-problem-' + self.unique_id;
-        iframe_resize_init = \
-           '<script type="text/javascript">//<![CDATA[\n iFrameResize({ ' + \
-           'checkOrigin: false, scrolling: true' + \
-           ', minHeight: ' + str(self.iframe_min_height) + \
-           ', maxHeight: ' + str(self.iframe_max_height) + \
-           ', minWidth: '  + str(self.iframe_min_width)  + \
-           '}, "#' + iframe_id + '")\n //]]></script>'
+        # Gingko - need to trigger the iFrameResize via the webwork_in_iframe.js
+        # JS file, as in studio (preview of question) it would fail to work and
+        # as a result the problem was not dispayed. We are leaving an empty string,
+        # as the prior approach works fine in Koa and Lilac.
+        iframe_resize_init = ""
 
         html = self.resource_string("static/html/webwork_in_iframe.html")
 
@@ -1440,11 +1438,15 @@ class WeBWorKXBlock(
         frag.add_css(self.resource_string("static/css/webwork.css"))
         frag.add_javascript( js1 )
 
+        # Gingko - add settings needed for the iFrameResize resize below.
         my_settings = {
           'unique_id' : self.unique_id,
           'rpID' : iframe_id,
           'messageDivID' : messageDiv_id,
-          'resultDivID' : resultDiv_id
+          'resultDivID' : resultDiv_id,
+          'iframe_min_height' : str(self.iframe_min_height),
+          'iframe_max_height' : str(self.iframe_max_height),
+          'iframe_min_width' : str(self.iframe_min_width)
         }
 
         frag.initialize_js('WeBWorKXBlockIframed', my_settings)
