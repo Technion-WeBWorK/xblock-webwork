@@ -1913,7 +1913,10 @@ class WeBWorKXBlock(
             response['message'] = "fixme" # e.message
 
         return Response(
-                text = json.dumps(response),
+                #---Ginkgo
+                text = json.dumps(response).decode(),
+                # text = json.dumps(response),
+                #----Ginkgo
                 content_type =  "application/json",
                 status = 200,
             )
