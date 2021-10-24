@@ -1566,7 +1566,10 @@ class WeBWorKXBlock(
         else:
             # This means that the server_type is not valid
             return Response(
-                    text = json.dumps(response),
+                    #---Ginkgo
+                    text = json.dumps(response).decode(),
+                    # text = json.dumps(response),
+                    #----Ginkgo
                     content_type =  "application/json",
                     status = 200,
                 )
