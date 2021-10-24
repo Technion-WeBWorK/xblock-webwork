@@ -81,6 +81,8 @@ from xmodule.util.duedate import get_extended_due_date
 # The recommended manner to format datetime for display in Studio and LMS is to use:
 # Ginkgo - this import is not working. FIXME
 # from common.djangoapps.util.date_utils import get_default_time_display
+# So we are using a local copy of the file:
+from .date_utils import get_default_time_display
 # -------------------End of Ginkgo-------
 
 # Need to support making an encrypted JWT for use by the Standalone renderer
@@ -444,12 +446,7 @@ class WeBWorKXBlock(
 
             # The formatting in the next line should be locale dependent, so we use
             # get_default_time_display()
-            #-------Ginkgo issue: we are not able to
-            #    import from common.djangoapps.util.date_utils
-            # at present so we cannot use get_default_time_display below.
-            # Temporarily set a fake string for self.formatted_lock_date_end
-            # self.formatted_lock_date_end = get_default_time_display(self.lock_date_end)
-            self.formatted_lock_date_end = 'bug!!! must fix'
+            self.formatted_lock_date_end = get_default_time_display(self.lock_date_end)
 
             if Now < self.lock_date_begin:
                 self.problem_period = PPeriods.PreDue
