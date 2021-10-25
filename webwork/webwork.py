@@ -1887,11 +1887,12 @@ class WeBWorKXBlock(
                         # Use self.submission_data_to_save to show that a "show correct answers" action was taken, but ONLY the first time.
                         if not self.student_viewed_correct_answers:
                             self.set_last_submission_time()
-                            self.student_answer.clear()
                             self.submission_data_to_save = {
                                 "action" : "show correct answers - called for the first time when permitted",
                                 'last_submission_time': str(self.last_submission_time)
                             }
+                            if not self.student_answer is None:
+                                self.student_answer.clear()
                         self.student_viewed_correct_answers = True
                         response['success'] = True
                         response['message'] = self.runtime.service(self, "i18n").ugettext("Correct answers should be provided in the table above the question.") + \
