@@ -9,8 +9,11 @@ based edX devstack with the WeBWorK XBlock installed it in, and a local install
 of the WeBWorK standalone renderer.
 
 In order to make this test system reasonably stable, the devstack is being set
-using to use the most recent named release (Lilac) of edX and not the `master`
-branch of the devstack, which frequently changes.
+using to use a named release of edX and not the `master` branch of the 
+devstack, which frequently changes. This file gives instructions for the 
+Koa named release. The file at
+https://github.com/Technion-WeBWorK/xblock-webwork/blob/master/install-docs/setup-devstack-named-release-with-webwork-xblock.md
+has instructions for the Lilac named release.
 
 This file is based on earlier instructions in
 https://github.com/Technion-WeBWorK/xblock-webwork/blob/master/install-docs/setup-devstack-docker-with-webwork-xblock.md
@@ -25,7 +28,10 @@ The devstack requirements at https://github.com/edx/devstack#prerequisites
 lists Python 3.8 as a prerequisite, and Ubuntu 20.04 LTS provides this
 version of Python by default and is well supported by Docker.
 As a result, this guide assumes that installation will be done in Ubuntu 20.04
-LTS.
+LTS. 
+
+Note: The majority of this process was also tested on Debian 11 ("bullseye") on
+a machine which already had Docker installed.
 
 Docker for Ubuntu, requires a 64-bit version of Ubuntu. (See https://docs.docker.com/engine/install/ubuntu/#prerequisites).
 
@@ -133,12 +139,9 @@ docker run hello-world
 # You should see the output from the test hello-world container.
 ```
 
-## Install the edX devstack for the lilac named release.
+## Install the edX devstack for the koa named release.
 
-We have tested these instructions for the "lilac" release.
-
-We also have tested that a similar process works for the "koa" release,
-where "koa" is used to replace "lilac" in many places in the process.
+We have tested these instructions for the "koa" release.
 
 ### Primary sources:
 
@@ -158,7 +161,7 @@ Using devstack with a named release requires that the `OPENEDX_RELEASE`
 environment variable be set before various commands are run. This is necessary
 both for the installation process, and in later use.
 
-Thus, please add the `export OPENEDX_RELEASE=lilac.master` line (included
+Thus, please add the `export OPENEDX_RELEASE=koa.master` line (included
 in the steps below) into your `.bashrc` file (or whatever file/command is
 needed if you are using a different shell) **after** completing the
 installation. That will make the correct setting of this environment variable
@@ -183,7 +186,7 @@ virtualenv venv
 source venv/bin/activate
 ```
 
-Now we install the devstack (using the "lilac" named release of edX):
+Now we install the devstack (using the "koa" named release of edX):
 
 ```
 git clone https://github.com/edx/devstack.git
@@ -199,12 +202,26 @@ export OPENEDX_RELEASE=
 make dev.clone.https
 ```
 
+---
+
+When `make dev.clone.https` was run when `OPENEDX_RELEASE` was set the output reported a fatal error:
+```
+Cloning into 'frontend-app-payment'...
+fatal: Remote branch open-release/koa.master not found in upstream origin
+make[1]: *** [Makefile:192: impl-dev.clone.https] Error 128
+make[1]: Leaving directory '/home/edxdevel/XblockEx/edx-devstack/devstack'
+Would you like to assist devstack development by sending anonymous usage metrics to edX? Run `make metrics-opt-in` to learn more!
+make: *** [Makefile:195: dev.clone.https] Error 2
+```
+
+---
+
 Hence, we set the value of `OPENEDX_RELEASE` below (after the prior step).
 
 ```
-# Change NOW to use the "lilac" named release:
-git checkout open-release/lilac.master
-export OPENEDX_RELEASE=lilac.master
+# Change NOW to use the "koa" named release:
+git checkout open-release/koa.master
+export OPENEDX_RELEASE=koa.master
 
 # The next command needs to be run after setting OPENEDX_RELEASE
 make dev.checkout
@@ -266,8 +283,8 @@ should still be running from the prior stage (or start up the venv again).
 ```
 cd ~/XblockEx/edx-devstack/devstack
 mkdir etc
-docker cp edx.devstack-lilac.master.studio:/edx/etc/studio.yml etc/studio.yml
-docker cp edx.devstack-lilac.master.studio:/edx/etc/lms.yml etc/lms.yml
+docker cp edx.devstack-koa.master.studio:/edx/etc/studio.yml etc/studio.yml
+docker cp edx.devstack-koa.master.studio:/edx/etc/lms.yml etc/lms.yml
 
 cp etc/studio.yml etc/studio.yml.ORIG
 cp etc/lms.yml etc/lms.yml.ORIG
@@ -324,8 +341,8 @@ is needed for the container to fully start up everything it needs.
 You can check the status of the container startup process by checking what is
 report in the logs using the commands
 ```
-docker logs edx.devstack-lilac.master.studio
-docker logs edx.devstack-lilac.master.lms
+docker logs edx.devstack-koa.master.studio
+docker logs edx.devstack-koa.master.lms
 ```
 
 Hopefully you will now be able to open http://localhost:18000 in your web
@@ -450,7 +467,7 @@ version: '3.5'
 networks:
   default:
     external:
-      name: devstack-lilacmaster_default
+      name: devstack-koamaster_default
 
 services:
   renderer:
@@ -474,7 +491,7 @@ services:
 ```
 
 The "special" settings made here are:
-  1. Attaching the Standalone render to the Docker `devstack-lilacmaster_default` network, which is the Docker network devstack will use the "lilac" named release.
+  1. Attaching the Standalone render to the Docker `devstack-koamaster_default` network, which is the Docker network devstack will use the "koa" named release.
   2. Naming the container as "wwstandalone" which will be used also in the "Other course settings" configuration on the edX side.
   3. Using the local `render_app.conf` we just created.
   4. Setting the `MOJO_MODE` to `development` so localhost:3000 gives the Standalone developer's web interface (which is not available in production mode).
@@ -626,8 +643,8 @@ cd ~/XblockEx/edx-devstack/devstack ; make dev.up.lms+studio
 cd ~/Render ; docker-compose up -d
 ```
 4. Wait until the edX devstack is fully up before accessing edX pages in browser
-  - You can run `docker logs edx.devstack-lilac.master.studio` and/or
-    `docker logs edx.devstack-lilac.master.lms` to check the progress.
+  - You can run `docker logs edx.devstack-koa.master.studio` and/or
+    `docker logs edx.devstack-koa.master.lms` to check the progress.
 
 ### Shutdown
 
