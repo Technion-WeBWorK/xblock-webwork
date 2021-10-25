@@ -717,7 +717,7 @@ class WeBWorKXBlock(
 
     problem = String(
         display_name = _("Problem"),
-        default = "Library/Dartmouth/setMTWCh2S4/problem_5.pg",
+        default = "Library/Rochester/setAlgebra18FunInverse/ur_inv_2.pg",
         scope = Scope.settings, # settings, so a course can modify, if needed, and not only Studio
         help = _("The path to load the problem from."),
     )
