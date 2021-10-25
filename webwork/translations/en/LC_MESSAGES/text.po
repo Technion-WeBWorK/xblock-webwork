@@ -17,78 +17,78 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: ../../../webwork.py:478
+#: webwork.py:523
 msgid "Current server settings for this block"
 msgstr ""
 
-#: ../../../webwork.py:560
+#: webwork.py:605
 msgid "Settings type"
 msgstr ""
 
-#: ../../../webwork.py:567
+#: webwork.py:612
 msgid ""
 "ID of server - should have a record in the Other course settings dictionary "
 "- see the documentation"
 msgstr ""
 
-#: ../../../webwork.py:571
+#: webwork.py:616
 msgid "List of course wide server ID options"
 msgstr ""
 
-#: ../../../webwork.py:573
+#: webwork.py:618
 msgid ""
 "Options of server IDs available in the course. This is a read only list!"
 msgstr ""
 
-#: ../../../webwork.py:577
+#: webwork.py:622
 msgid "ID of server"
 msgstr ""
 
-#: ../../../webwork.py:580
+#: webwork.py:625
 msgid "ID of server - enter an option from the list in ww_server_id_options."
 msgstr ""
 
-#: ../../../webwork.py:584
+#: webwork.py:629
 msgid "Type of server (html2xml or standalone)"
 msgstr ""
 
-#: ../../../webwork.py:591
+#: webwork.py:636
 msgid ""
 "This is the type of webwork server rendering and grading the problems "
 "(html2xml or standalone)."
 msgstr ""
 
-#: ../../../webwork.py:595
+#: webwork.py:640
 msgid "WeBWorK server address with API endpoint"
 msgstr ""
 
-#: ../../../webwork.py:597
+#: webwork.py:642
 msgid ""
 "This is the full URL of the webwork server including the path to the "
 "html2xml or render-api endpoint."
 msgstr ""
 
-#: ../../../webwork.py:601
+#: webwork.py:646
 msgid "WeBWorK server address with path for static files"
 msgstr ""
 
-#: ../../../webwork.py:603
+#: webwork.py:648
 msgid ""
 "This is the URL of the path to static files on the webwork server. Needed "
 "for html2xml servers."
 msgstr ""
 
-#: ../../../webwork.py:607
+#: webwork.py:652
 msgid "Authentication settings for the server"
 msgstr ""
 
-#: ../../../webwork.py:609
+#: webwork.py:654
 msgid ""
 "This is the authentication data needed to interface with the server. "
 "Required fields depend on the server type."
 msgstr ""
 
-#: ../../../webwork.py:627
+#: webwork.py:672
 msgid "Display Name"
 msgstr ""
 
@@ -96,215 +96,215 @@ msgstr ""
 msgid "WeBWorK Problem"
 msgstr ""
 
-#: ../../../webwork.py:630
+#: ../../../webwork.py:683
 msgid ""
 "Display name which appears in the control bar above the content in Studio "
 "view."
 msgstr ""
 
-#: ../../../webwork.py:635
+#: webwork.py:688
 msgid "Problem Banner Text"
 msgstr ""
 
-#: ../../../webwork.py:638
+#: webwork.py:692
 msgid "This text appears as an H3 header above the problem."
 msgstr ""
 
-#: ../../../webwork.py:642
+#: webwork.py:696
 msgid "Problem"
 msgstr ""
 
-#: ../../../webwork.py:645
+#: webwork.py:699
 msgid "The path to load the problem from."
 msgstr ""
 
-#: ../../../webwork.py:649
+#: webwork.py:703
 msgid "WeBWorK main language"
 msgstr ""
 
-#: ../../../webwork.py:652
+#: webwork.py:706
 msgid ""
 "The name of the language translation file to use to select the language in "
 "which standard strings should be provided."
 msgstr ""
 
-#: ../../../webwork.py:656
+#: webwork.py:710
 msgid "Maximum score"
 msgstr ""
 
-#: ../../../webwork.py:659
+#: webwork.py:713
 msgid ""
 "Maximum possible score for this problem (the webwork score between 0 and 1 "
 "will be multiplied by this factor)"
 msgstr ""
 
-#: ../../../webwork.py:663
+#: webwork.py:717
 msgid "Allowed (for credit) submissions"
 msgstr ""
 
-#: ../../../webwork.py:666
+#: webwork.py:720
 msgid "Maximum number of allowed submissions for credit (0 = unlimited)"
 msgstr ""
 
-#: ../../../webwork.py:670
+#: webwork.py:724
 msgid "No attempts limit case - attempts before Show Answers is permitted"
 msgstr ""
 
-#: ../../../webwork.py:673
+#: webwork.py:727
 msgid ""
 "When an unlimited number of submissions are permitted, this sets the number "
 "of submissions required before Show Answers is permitted"
 msgstr ""
 
-#: ../../../webwork.py:677
+#: webwork.py:731
 msgid ""
 "Post deadline lockdown period (in hours) when submission is not permitted"
 msgstr ""
 
-#: ../../../webwork.py:680
+#: webwork.py:734
 msgid ""
 "How long, in hours, should the problem be locked after the deadline (and the "
 "grace period) before submission is allowed again (0 = no delay)"
 msgstr ""
 
-#: ../../../webwork.py:684
+#: webwork.py:738
 msgid "Show Answers"
 msgstr ""
 
-#: ../../../webwork.py:687
+#: webwork.py:741
 msgid ""
 "Allow students to view correct answers (after deadline or if no deadline "
 "after all attempts used / or required number of attempts used when there is "
 "no attempt limit.)?"
 msgstr ""
 
-#: ../../../webwork.py:691
+#: webwork.py:745
 msgid "Allow WeBWorK to provide hints"
 msgstr ""
 
-#: ../../../webwork.py:694
+#: webwork.py:748
 msgid ""
 "Allow WeBWorK to provide hints, if the problem has such, based on the number "
 "of prior attempts (as sent by the XBlock using the WW style counters) and "
 "the threshold set in the problems file."
 msgstr ""
 
-#: ../../../webwork.py:698
+#: webwork.py:752
 msgid "Allow WeBWorK to provide solutions"
 msgstr ""
 
-#: ../../../webwork.py:701
+#: webwork.py:755
 msgid ""
 "Allow WeBWorK to provide the solution when Check Answers is used, if the "
 "problem has such."
 msgstr ""
 
-#: ../../../webwork.py:706
+#: webwork.py:760
 msgid "Custom Parameters"
 msgstr ""
 
-#: ../../../webwork.py:707
+#: webwork.py:761
 msgid ""
 "Add the key/value pair for any custom parameters as a JSON object. Ex. "
 "{\"setting1\":71, \"setting2\": \"white\"}"
 msgstr ""
 
-#: ../../../webwork.py:712
+#: webwork.py:766
 msgid "Iframe Minimum Height"
 msgstr ""
 
-#: ../../../webwork.py:714
+#: webwork.py:768
 msgid ""
 "Enter the desired minimum pixel height of the iframe which will contain the "
 "problem. (Minimum: 380)"
 msgstr ""
 
-#: ../../../webwork.py:721
+#: webwork.py:775
 msgid "Iframe Maximum Height"
 msgstr ""
 
-#: ../../../webwork.py:723
+#: webwork.py:777
 msgid ""
 "Enter the desired maximum pixel height of the iframe which will contain the "
 "problem. (Minimum: 380)"
 msgstr ""
 
-#: ../../../webwork.py:730
+#: webwork.py:784
 msgid "Iframe Minimum Width"
 msgstr ""
 
-#: ../../../webwork.py:732
+#: webwork.py:786
 msgid ""
 "Enter the desired minimum pixel width of the iframe which will contain the "
 "problem.  (Minimum: 500)"
 msgstr ""
 
-#: ../../../webwork.py:739
+#: webwork.py:793
 msgid "Timeout [in seconds] for Webwork Server Requests"
 msgstr ""
 
-#: ../../../webwork.py:741
+#: webwork.py:795
 msgid ""
 "Maximal number of seconds to wait for response from the webwork server. <br/"
 ">Don't change unless you are dealing with heavy duty problem."
 msgstr ""
 
-#: ../../../webwork.py:751
+#: webwork.py:805
 msgid "The student's answer."
 msgstr ""
 
-#: ../../../webwork.py:757
+#: webwork.py:811
 msgid "Number of times the student has submitted this problem. Simple counter."
 msgstr ""
 
-#: ../../../webwork.py:764
+#: webwork.py:818
 msgid "Additional number of attempts granted by the staff to this user."
 msgstr ""
 
-#: ../../../webwork.py:770
+#: webwork.py:824
 msgid ""
 "Number of (fully) correct submissions processed in the past (while the "
 "problem is for credit). WeBWorK uses this field in internal calculations, "
 "and the Standalone renderer accepts a value to be used in procssing."
 msgstr ""
 
-#: ../../../webwork.py:776
+#: webwork.py:830
 msgid ""
 "Number of incorrect submissions processed in the past  (while the problem is "
 "for credit). WeBWorK uses this field in internal calculations, and the "
 "Standalone renderer accepts a value to be used in procssing."
 msgstr ""
 
-#: ../../../webwork.py:782
+#: webwork.py:836
 msgid "Random seed for this student"
 msgstr ""
 
-#: ../../../webwork.py:788
+#: webwork.py:842
 msgid "Data to save as part of a submission."
 msgstr ""
 
-#: ../../../webwork.py:792
+#: webwork.py:846
 msgid "Student viewed the correct answers"
 msgstr ""
 
-#: ../../../webwork.py:795
+#: webwork.py:849
 msgid "Did the student already view the correct answers?"
 msgstr ""
 
-#: ../../../webwork.py:814
+#: webwork.py:868
 msgid ""
 "Dictionary of options for PSVN PSVN = problem set version number, used by "
 "WeBWorK to seed multi-part problems"
 msgstr ""
 
-#: ../../../webwork.py:821
+#: webwork.py:875
 msgid ""
 "Key (an integer) for the PSVN to use for this problem. Selects from "
 "psvn_options. PSVN = problem set version number, used by WeBWorK to seed "
 "multi-part problems"
 msgstr ""
 
-#: ../../../webwork.py:842
+#: webwork.py:896
 msgid ""
 "\n"
 "            The student's (best) earned score on the problem - out of "
@@ -315,181 +315,231 @@ msgid ""
 "            "
 msgstr ""
 
-#: ../../../webwork.py:854
+#: webwork.py:908
 msgid "Problem Weight"
 msgstr ""
 
-#: ../../../webwork.py:855
+#: webwork.py:909
 msgid "Defines the number of points the problem is worth."
 msgstr ""
 
-#: ../../../webwork.py:864
+#: webwork.py:918
 msgid "Runtime XBlock UNIQUE_ID"
 msgstr ""
 
-#: ../../../webwork.py:867
+#: webwork.py:921
 msgid "A runtime unique ID for this instance of this XBlock."
 msgstr ""
 
-#: ../../../webwork.py:873
+#: webwork.py:927
 msgid "Whether the student has answered the problem and had a result saved"
 msgstr ""
 
-#: ../../../webwork.py:879
+#: webwork.py:933
 msgid "Last submission time"
 msgstr ""
 
-#: ../../../webwork.py:895
+#: webwork.py:949
 msgid "Custom Parameters must be a JSON object (dictionary)."
 msgstr ""
 
-#: ../../../webwork.py:899
+#: webwork.py:953
 msgid "Max allowed score must be non-negative."
 msgstr ""
 
-#: ../../../webwork.py:903
+#: webwork.py:957
 msgid ""
 "Max allowed attempts must be non-negative. Zero is for no limit on the "
 "number of allowed attempts."
 msgstr ""
 
-#: ../../../webwork.py:907
+#: webwork.py:961
 msgid ""
 "no_attempt_limit_required_attempts_before_show_answers must be non-negative."
 msgstr ""
 
-#: ../../../webwork.py:911
+#: webwork.py:965
 msgid ""
 "Post deadline lockdown (in hours) must be non-negative. Use 0 for no lock-"
 "down period."
 msgstr ""
 
-#: ../../../webwork.py:915
+#: webwork.py:969
 msgid "iframe_min_height must be at least 380 pixels."
 msgstr ""
 
-#: ../../../webwork.py:919
+#: webwork.py:973
 msgid "iframe_max_height must be at least 380 pixels."
 msgstr ""
 
-#: ../../../webwork.py:923
+#: webwork.py:977
 msgid "iframe_min_width must be at least 500 pixels."
 msgstr ""
 
-#: ../../../webwork.py:927
+#: webwork.py:981
 msgid "webwork_request_timeout must be at least 0.5 (seconds)."
 msgstr ""
 
-#: ../../../webwork.py:931
+#: webwork.py:985
 msgid ""
 "weight must be non-negative. A weight of 0 essentially removes the score on "
 "this problem from the section grade calculation."
 msgstr ""
 
-#: ../../../webwork.py:1298
+#: webwork.py:1434
 #, python-brace-format
 msgid ""
 "So far you have made {attempts_used} graded submissions to this problem."
 msgstr ""
 
-#: ../../../webwork.py:1303
+#: webwork.py:1439
 msgid "You have not yet made a graded submission to this problem."
 msgstr ""
 
-#: ../../../webwork.py:1307
+#: webwork.py:1444
 #, python-brace-format
 msgid ""
 "You are allowed at most {max_attempts} graded submissions to this problem."
 msgstr ""
 
-#: ../../../webwork.py:1312
+#: webwork.py:1449
 msgid ""
 "You are allowed an unlimited number of graded submissions to this problem."
 msgstr ""
 
-#: ../../../webwork.py:1325
+#: webwork.py:1463
 #, python-brace-format
 msgid ""
 "Your recorded (best) score is {old_best} points from {max_score} points."
 "{attempts_message}"
 msgstr ""
 
-#: ../../../webwork.py:1340 ../../../webwork.py:1349 ../../../webwork.py:1360
+#: webwork.py:1478 webwork.py:1487 webwork.py:1498
 #, python-brace-format
 msgid "Your score from this submission is {new_score} from {max_score} points."
 msgstr ""
 
-#: ../../../webwork.py:1344
+#: webwork.py:1482
 #, python-brace-format
 msgid ""
 "The new score will replace your prior best score of {old_best} points."
 "{attempts_message}"
 msgstr ""
 
-#: ../../../webwork.py:1353
+#: webwork.py:1491
 #, python-brace-format
 msgid ""
 "That is less than your prior best score of {old_best} points, so the prior "
 "score remains your current recorded score for the problem.{attempts_message}"
 msgstr ""
 
-#: ../../../webwork.py:1358
+#: webwork.py:1496
 msgid "This is a submission which is not for credit."
 msgstr ""
 
-#: ../../../webwork.py:1364
+#: webwork.py:1502
 #, python-brace-format
 msgid "Your recorded best score on the problem is {old_best} points."
 msgstr ""
 
-#: ../../../webwork.py:1459 ../../../webwork.py:1479 ../../../webwork.py:1639
+#: webwork.py:1514
+msgid "An unexpected error occurred!"
+msgstr ""
+
+#: webwork.py:1582 webwork.py:1613
+msgid "Sorry, you cannot submit answers now."
+msgstr ""
+
+#: webwork.py:1585 webwork.py:1616 webwork.py:1636 webwork.py:1796
 #, python-brace-format
 msgid "Additional use of the problem is not permitted until {unlock_datetime}"
 msgstr ""
 
-#: ../../../webwork.py:1476
+#: webwork.py:1591
 msgid ""
-"Sorry, can't submit now since your made the maximum number of allowed "
+"This problem is after the deadline, so additional submissions are not for "
+"credit. You will get feedback on your answers."
+msgstr ""
+
+#: webwork.py:1598 webwork.py:1681 webwork.py:1810 webwork.py:1883
+msgid ""
+"An error occurred. Please try again later, and if the problem occurs again, "
+"please report the issue to the support staff."
+msgstr ""
+
+#: webwork.py:1633
+msgid ""
+"Sorry, can't submit now since you made the maximum number of allowed "
 "submissions for credit."
 msgstr ""
 
-#: ../../../webwork.py:1493
+#: webwork.py:1650
 #, python-brace-format
 msgid ""
 "You have exceeded the maximum number ({max_attempts}) of graded attempts "
 "allowed on this problem."
 msgstr ""
 
-#: ../../../webwork.py:1497
+#: webwork.py:1654
 msgid ""
 "This and additional submissions are allowed, but your recorded grade will "
 "not be changed."
 msgstr ""
 
-#: ../../../webwork.py:1498
+#: webwork.py:1655
 msgid "You may now also use the Show Correct Answers button."
 msgstr ""
 
-#: ../../../webwork.py:1678
+#: webwork.py:1662 webwork.py:1818 webwork.py:1873
+msgid "An error occurred"
+msgstr ""
+
+#: webwork.py:1793
+msgid "Sorry, you cannot preview answers now."
+msgstr ""
+
+#: webwork.py:1813
+msgid ""
+"A preview of how the system understands your answers should be provided in "
+"the table above the question."
+msgstr ""
+
+#: webwork.py:1829
+msgid "Sorry, this problem is set to forbid access to the correct answers."
+msgstr ""
+
+#: webwork.py:1832
+msgid "Sorry, you cannot request to see the correct answers now."
+msgstr ""
+
+#: webwork.py:1835
 #, python-brace-format
 msgid "Answers will become available at {unlock_datetime}"
 msgstr ""
 
-#: ../../../webwork.py:1698
+#: webwork.py:1855
 #, python-brace-format
 msgid ""
-"Answers will become available after you make at {required_to_show} "
+"Answers will become available after you make at least {required_to_show} "
 "submissions."
 msgstr ""
 
-#: ../../../webwork.py:1706
+#: webwork.py:1863
 #, python-brace-format
 msgid ""
 "Correct answers for this problem will become available after you submit at "
 "least {required_to_show} answers."
 msgstr ""
 
-#: ../../../webwork.py:1710
+#: webwork.py:1867
 #, python-brace-format
 msgid "You have already submitted {attempts} answers to be graded."
+msgstr ""
+
+#: webwork.py:1897
+msgid "Correct answers should be provided in the table above the question."
+msgstr ""
+
+#: webwork.py:1901
+msgid "An error occurred - invalid submission type"
 msgstr ""
