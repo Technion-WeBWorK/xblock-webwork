@@ -1511,7 +1511,7 @@ class WeBWorKXBlock(
         """
         response = {
             'success': False, # Set ONLY when the HTML in the iFrame should be replaced
-            'message': "An unexpected error occurred!",
+            'message': self.runtime.service(self, "i18n").ugettext("An unexpected error occurred!"),
             'score': '',
             'scored': False
         }
@@ -1574,12 +1574,31 @@ class WeBWorKXBlock(
                 request.update(REQUEST_PARAMETERS)
                 webwork_response = self.request_webwork(request)
                 response['renderedHTML'] = self._problem_from_json(webwork_response)
+
+
+                # Prepare message to provide when the problem is locked / post-deadline
+                if self.problem_period is PPeriods.PostDueLocked:
+                    allow_submit = False
+                    part1 = self.runtime.service(self, "i18n").ugettext("Sorry, you cannot submit answers now.")
+                    if self.formatted_lock_date_end:
+                        part2 = "<br>" + self.runtime.service(self, "i18n").ugettext(
+                            "Additional use of the problem is not permitted until {unlock_datetime}").format(
+                                unlock_datetime = self.formatted_lock_date_end
+                                ) + "<br>"
+                    else:
+                        part2 = "<br>"
+                elif self.problem_period is PPeriods.PostDueUnLocked:
+                    part1 = self.runtime.service(self, "i18n").ugettext("This problem is after the deadline, so additional submissions are not for credit. You will get feedback on your answers.")
+                    part2 = "<br>"
+                else:
+                    part1 = ""
+                    part2 = ""
                 if response['renderedHTML'] == 'Error':
                     response['success'] = False
-                    response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
+                    response['message'] = self.runtime.service(self, "i18n").ugettext("An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff.")
                 else:
                     response['success'] = True
-                    response['message'] = self.create_current_score_message()
+                    response['message'] = part1 + part2 + self.create_current_score_message()
             elif request['submit_type'] == "submitAnswers":
                 request.pop('submit_type')
                 # We will only modify self.student_answer only once we are certain that a submission is
@@ -1591,7 +1610,7 @@ class WeBWorKXBlock(
                 # FIX
                 if self.problem_period is PPeriods.PostDueLocked:
                     allow_submit = False
-                    part1 = "Sorry, you cannot submit answers now."
+                    part1 = self.runtime.service(self, "i18n").ugettext("Sorry, you cannot submit answers now.")
                     if self.formatted_lock_date_end:
                         part2 = "<br>" + self.runtime.service(self, "i18n").ugettext(
                             "Additional use of the problem is not permitted until {unlock_datetime}").format(
@@ -1640,7 +1659,7 @@ class WeBWorKXBlock(
                 else:
                     # Bad value
                     response['success'] = False
-                    response['message'] = "An error occurred"
+                    response['message'] = self.runtime.service(self, "i18n").ugettext("An error occurred")
                     raise WeBWorKXBlockError("An error determining while processing your request. (Period error)")
 
                 if allow_submit:
@@ -1659,7 +1678,7 @@ class WeBWorKXBlock(
                         # If we have an error, we will not increase the attempts counter.
                         response.update( self.period_button_settings() ) # The values may have changed since the last render
                         response['success'] = False
-                        response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
+                        response['message'] = self.runtime.service(self, "i18n").ugettext("An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff.")
                     else:
                         response['success'] = True
                         response['message'] = '' # currently no error
@@ -1771,7 +1790,7 @@ class WeBWorKXBlock(
                         self.problem_period is PPeriods.PreDue and
                         self.final_max_attempts() > 0 and
                         self.student_attempts >= self.final_max_attempts() ):
-                    part1 = "Sorry, you cannot preview answers now."
+                    part1 = self.runtime.service(self, "i18n").ugettext("Sorry, you cannot preview answers now.")
                     if self.formatted_lock_date_end:
                         part2 = "<br>" + self.runtime.service(self, "i18n").ugettext(
                             "Additional use of the problem is not permitted until {unlock_datetime}").format(
@@ -1788,15 +1807,15 @@ class WeBWorKXBlock(
                     # On preview we do not need to save result of the call, so we do not want to make any change to the XBlock state.
                     if response['renderedHTML'] == 'Error':
                         response['success'] = False
-                        response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
+                        response['message'] = self.runtime.service(self, "i18n").ugettext("An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff.")
                     else:
                         response['success'] = True
-                        response['message'] = "A preview of how the system understands your answers should be provided in the table above the question." + \
+                        response['message'] = self.runtime.service(self, "i18n").ugettext("A preview of how the system understands your answers should be provided in the table above the question.") + \
                             "<br>" + self.create_current_score_message()
                 else:
                     # Bad value
                     response['success'] = False
-                    response['message'] = "An error occurred"
+                    response['message'] = self.runtime.service(self, "i18n").ugettext("An error occurred")
                     raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
             elif request['submit_type'] == "showCorrectAnswers":
                 request.pop('submit_type')
@@ -1807,10 +1826,10 @@ class WeBWorKXBlock(
                 # Note: self.allow_show_answer is a main XBlock level setting
                 #       allow_show_correct is the locally calculated value used to determine whether the action is permitted.
                 if not self.allow_show_answers:
-                    response['message'] = "Sorry, this problem is set to forbid access to the correct answers." + \
+                    response['message'] = self.runtime.service(self, "i18n").ugettext("Sorry, this problem is set to forbid access to the correct answers.") + \
                         "<br>" + self.create_current_score_message()
                 elif self.problem_period is PPeriods.PreDue or self.problem_period is PPeriods.PostDueLocked:
-                    part1 = "Sorry, you cannot request to see the correct answers now."
+                    part1 = self.runtime.service(self, "i18n").ugettext("Sorry, you cannot request to see the correct answers now.")
                     if self.formatted_lock_date_end:
                         part2 = "<br>" + self.runtime.service(self, "i18n").ugettext(
                             "Answers will become available at {unlock_datetime}").format(
@@ -1851,7 +1870,7 @@ class WeBWorKXBlock(
                 else:
                     # Bad value
                     response['success'] = False
-                    response['message'] = "An error occurred"
+                    response['message'] = self.runtime.service(self, "i18n").ugettext("An error occurred")
                     raise WeBWorKXBlockError("An error determining whether processing of this request is allowed occurred.")
                 if allow_show_correct:
                     request.update(RESPONSE_PARAMETERS_SHOWCORRECT)
@@ -1861,7 +1880,7 @@ class WeBWorKXBlock(
                     response['renderedHTML'] = self._problem_from_json(webwork_response)
                     if response['renderedHTML'] == 'Error':
                         response['success'] = False
-                        response['message'] = "An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff."
+                        response['message'] = self.runtime.service(self, "i18n").ugettext("An error occurred. Please try again later, and if the problem occurs again, please report the issue to the support staff.")
                     else:
                         # On show correct we do not need to save result of the call, or the student_answer data,
                         # so we clear the relevant fields, and on the first use only, just save a record showing that show answers was used.
@@ -1875,11 +1894,11 @@ class WeBWorKXBlock(
                             }
                         self.student_viewed_correct_answers = True
                         response['success'] = True
-                        response['message'] = "Correct answers should be provided in the table above the question." + \
+                        response['message'] = self.runtime.service(self, "i18n").ugettext("Correct answers should be provided in the table above the question.") + \
                             "<br>" + self.create_current_score_message()
             else:
                 response['success'] = False
-                response['message'] = "An error occurred - invalid submission type"
+                response['message'] = self.runtime.service(self, "i18n").ugettext("An error occurred - invalid submission type")
                 raise WeBWorKXBlockError("Unknown submit button used")
 
         except WeBWorKXBlockError as e:
