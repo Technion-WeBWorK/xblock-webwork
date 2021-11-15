@@ -12,7 +12,7 @@ The WeBWorK XBlock is designed to leverage those capabilities to allow embedding
 
 The WeBWorK XBlock is designed to function as a Man in the Middle (MiTM) system, where all end-user (student) interactions is carried out in direct communications with the Open edX server, including the loading of the main problem content, and the submission of answers to be graded. The XBlock running inside the Open edX server will manage all user state information (student identity, scores, parameters related to the problem assigned, answers submitted) and will communicate with a back-end WeBWorK problem renderer to retrieve the problem text and data, to submit answers received from a student, and to retrieve the feedback and score for such submissions. The relevant data will be sent back to the end user's browser.
 
-The WeBWorK problems will be enclosed in an iFrame, where the main problem text will be pushed into the iFrame via the `srcdoc` attribute using a JavaScript handler. The JavaScript code outside the XBlock will inform the `submit` buttons inside the iFrame to pass submissions to a JavaScript function running in the encapsulating web page, and that JavaScript handler will initiate an AJAX call to the relevant handler routine on the Open edX server. The internal iFrame will be retreive all additional resources required (JavaScript code, CSS styling, images, etc.) from the relevant web locations as instructed to by the HTML code of a problem. The initial problem loading will also be done via the same type of AJAX call, whereby enabling the main page structure to load quickly, and deferring the calls to the WeBWorK back-end to be handled later on during the page load process.
+The WeBWorK problems will be enclosed in an iFrame, where the main problem text will be pushed into the iFrame via the `srcdoc` attribute using a JavaScript handler. The JavaScript code outside the XBlock will inform the `submit` buttons inside the iFrame to pass submissions to a JavaScript function running in the encapsulating web page, and that JavaScript handler will initiate an AJAX call to the relevant handler routine on the Open edX server. The internal iFrame will be retrieve all additional resources required (JavaScript code, CSS styling, images, etc.) from the relevant web locations as instructed to by the HTML code of a problem. The initial problem loading will also be done via the same type of AJAX call, whereby enabling the main page structure to load quickly, and deferring the calls to the WeBWorK back-end to be handled later on during the page load process.
 
 The XBlock users the XBlock Fields API, and in particular fields with Scope.user_state to manage and persist data related to an individual students use of a problem, including the (best) score earned, the number of graded submissions processed, etc.
 
@@ -66,13 +66,20 @@ However, as certain types of WeBWorK problems can depend on a `psvn` parameter, 
 * Messages are generated to display the current and recorded best score, the number of attempts allowed and used so far, etc.
 
 * The XBlock will provide information to the AJAX calls about which submission buttons should be active and which should be disabled.
-  * In any case, the code also verifies and prevents use of capabilities which are not currently intended to be available to the end user. (For example, a "Show Correct Answers" submission will not be processed when it is not permitted and will instead trigger a suitable message to be diplayed to the end user.
+  * In any case, the code also verifies and prevents use of capabilities which are not currently intended to be available to the end user. (For example, a "Show Correct Answers" submission will not be processed when it is not permitted and will instead trigger a suitable message to be displayed to the end user.
 
 * Data on submitted answers will be stored using the extended `CSMH` in a similar manner to standard Open edX problems.
   * The XBlock code attempts to carefully select which answer related data provided by the WeBWorK server is persisted, and uses Python dictionaries to collect the names of keys to be saved.
-  * At present it is necessary to make 2 very small modifications to enable the WeBWorK XBlock to use that facility, one to enable storing the data, and one to automatically enable course staff to view the submissions using the same preexisting facilty used by `problem`.
+  * At present it is necessary to make 2 very small modifications to enable the WeBWorK XBlock to use that facility, one to enable storing the data, and one to automatically enable course staff to view the submissions using the same preexisting facility used by `problem`.
   * A small change to make configuring which XBlocks can use those feature via the system configuration files was developed.
-     * We intend to submit a pull request with those small changes to the core project.
+    * We intend to submit a pull request with those small changes to the core project.
+    * For now - please see:
+      * https://github.com/Technion-WeBWorK/edx-platform/commit/4ca75014531e0d21ecc17add3499aa6fa11771ec (the main code changes)
+      * https://github.com/Technion-WeBWorK/edx-platform/commit/57b75df2536afcccf7cc89efb1c19d3784f8a696 (changes required to get the new setting loaded for AWS deployed servers)
+        * Changes made there to `lms/envs/aws.py` for Ginkgo (on AWS) apparently belong in `lms/envs/production.py` for some later versions of edX.
+    * The changes depend on adding a new setting `HISTORY_SAVING_TYPES` into the LMS settings.
+      * For Ginkgo, the setting change is made in `lms.env.json` by adding the line: `HISTORY_SAVING_TYPES = [ "problem", "webwork" ]`
+      * For later versions of edX, which use `etc/lms.yml` the additional line to add is: `HISTORY_SAVING_TYPES: ['problem','webwork']`
   * Some experimentation was done with persisting the submissions using the `submissions` API, and commented out code to use that alternative was left in the code for possible use in the future.
 
 * The `student_view` method and the main `html` fragment file and `js` file are quite small, as problem loading is done via an AJAX call similar to that used to submit answers, etc.
@@ -93,7 +100,7 @@ A `unique_id` of score `Scope.user_state` is used to identify HTML elements belo
 
 ### Calls to the backend servers are routed via
   * `request_webwork_standalone` (uses HTTP `POST`) and initial work to send the critical settings via an encrypted JWT was implemented. More work is needed on this.
-  * `request_webwork_html2xml`(uses HTTP `GET`)
+  * `request_webwork_html2xml`(uses HTTP `POST`)
 These are the only 2 methods via which calls to the back-end renderers can be made.
 
 They are called via `request_webwork` which adds some final settings to the request before one of those options is called.

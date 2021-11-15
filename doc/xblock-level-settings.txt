@@ -41,7 +41,7 @@ XBlock fields
     ww_server_type, ww_server_api_url, ww_server_static_files_url, auth_data = problem specific server settings (not recommended, use course-wide settings instead)
 
   Problem - display related settings
-    ww_language = used to set the language of the translation dictionary to use on the WeBWorK side. (Currently only supported by html2xml as there are no dictionaries yet for the standalone renderer.)
+    ww_language = used to set the language of the translation dictionary to use on the WeBWorK side. (The standalone render supports "heb" = hebrew in addition to English at present.)
 
     # Probably do not need to be edited
     display_name
