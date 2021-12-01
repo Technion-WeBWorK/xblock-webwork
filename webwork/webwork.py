@@ -1338,6 +1338,25 @@ class WeBWorKXBlock(
         """
         return self.max_allowed_score
 
+    # The edX grading infrastructure expects there to be a max_score method,
+    # and without one, a WeBWorK problem which was not yet submitted (for credit)
+    # will not appear in the "progress page". That is a serious bug.
+    # Also, without the max_score() method error messages were being logged that
+    # "GradesTransformer: max_score is None".
+    #
+    # Commit 1e453d4b74a9d5d3d18cded5c6d88b96156d8651 changed the max_score() method to
+    # get_max_score() as that makes its usage clearer elsewhere in this XBlock.
+    # We are adding a second copy with the expected name, as needed by core edX code.
+    #
+    # See: https://github.com/edx/edx-platform/blob/master/lms/djangoapps/grades/transformer.py#L152
+    # and: https://github.com/edx/edx-platform/blob/master/lms/djangoapps/grades/scores.py#L233
+    # See also: https://github.com/edx/edx-platform/pull/13655
+    def max_score(self):
+        """
+        Get the max score
+        """
+        return self.max_allowed_score
+
     def resource_string(self, path):
         """
         Handy helper for getting resources from our kit.
