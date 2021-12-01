@@ -50,7 +50,12 @@ from django.utils.translation import ugettext_lazy as _ # pylint: disable=import
 # and was patched for that XBlock in https://github.com/mitodl/edx-sga/pull/254 .
 # Their fix replaced "import ugettext_lazy" with "import ugettext" above for _ totally.
 # We want to keep ugettext_lazy for help strings, so instead add:
-from django.utils.translation import ugettext as non_lazy_ugettext # pylint: disable=import-error
+#
+# 2021-12-01 the use of non_lazy_ugettext is making trouble
+# for celery worked on the production systems (on AWS).
+# Try dropping it, and remove request to translate defaults
+# which used it.
+#from django.utils.translation import ugettext as non_lazy_ugettext # pylint: disable=import-error
 
 # from django.utils import translation # FIXME remove after debug i18n-try1 branch
 
@@ -701,7 +706,12 @@ class WeBWorKXBlock(
        # for a discussion about a similar error in SGA XBlock.
        # Since we want to continue to enable lazy translations of the help strings,
        # we use non_lazy_ugettext
-       default = non_lazy_ugettext("WeBWorK Problem"),
+       # 2021-12-01 the use of non_lazy_ugettext is making trouble
+       # for celery worked on the production systems (on AWS).
+       # Try dropping it, and remove request to translate defaults
+       # which used it.
+       #default = non_lazy_ugettext("WeBWorK Problem"),
+       default = "WeBWorK Problem",
        scope = Scope.settings,
        help = _("Display name which appears in the control bar above the content in Studio view.") # Where else?
        #help=_("This name appears in the horizontal navigation at the top of the page."),
@@ -710,7 +720,12 @@ class WeBWorKXBlock(
     problem_banner_text = String(
        display_name = _("Problem Banner Text"),
        # non_lazy_ugettext also here
-       default = non_lazy_ugettext("WeBWorK Problem"),
+       # 2021-12-01 the use of non_lazy_ugettext is making trouble
+       # for celery worked on the production systems (on AWS).
+       # Try dropping it, and remove request to translate defaults
+       # which used it.
+       #default = non_lazy_ugettext("WeBWorK Problem"),
+       default = "WeBWorK Problem",
        scope = Scope.settings,
        help=_("This text appears as an H3 header above the problem."),
     )
