@@ -120,10 +120,26 @@ function WeBWorKXBlockIframed(runtime, element, initdata) {
 
             let formJsonData = {};
 
-            for (const [key, value] of formDataEntries) {
-                formJsonData[key] = value;
-            }
-            /* End of code based on  https://ilikekillnerds.com/2017/09/convert-formdata-json-object/ */
+            /* The original approach did not send multiple values of checkboxes.
+               Modify based on https://stackoverflow.com/a/49826736
+               from inside the page https://stackoverflow.com/questions/41431322/how-to-convert-formdata-html5-object-to-json
+            */
+
+            formData.forEach(
+              ( value, key ) => {
+                // Check if property already exist
+                if ( Object.prototype.hasOwnProperty.call( formJsonData, key ) ) {
+                  let current = formJsonData[ key ];
+                  if ( !Array.isArray( current ) ) {
+                    // If it's not an array, convert it to an array.
+                    current = formJsonData[ key ] = [ current ];
+                  }
+                  current.push( value ); // Add the new value to the array.
+                } else {
+                  formJsonData[ key ] = value;
+                }
+              }
+            );
 
             $.ajax({
                 type: "POST",
