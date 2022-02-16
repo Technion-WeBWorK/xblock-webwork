@@ -4,12 +4,14 @@ function WeBWorKXBlockIframed(runtime, element, initdata) {
 
     var handlerUrl = runtime.handlerUrl(element, 'submit_webwork_iframed');
 
-    console.log("I was sent rpID ", initdata.rpID);
-    console.log("I was sent messDivID ", initdata.messageDivID);
-    console.log("I was sent resultDivID ", initdata.resultDivID);
-    console.log("All initdata = ", initdata);
+    /*
+      console.log("I was sent rpID ", initdata.rpID);
+      console.log("I was sent messDivID ", initdata.messageDivID);
+      console.log("I was sent resultDivID ", initdata.resultDivID);
+      console.log("All initdata = ", initdata);
 
-    console.log("handlerUrl is ", handlerUrl);
+      console.log("handlerUrl is ", handlerUrl);
+    */
 
     let problemiframe = document.getElementById(initdata.rpID);
     let messageDiv = document.getElementById(initdata.messageDivID);
@@ -51,22 +53,22 @@ function WeBWorKXBlockIframed(runtime, element, initdata) {
     function hideButtons(result) {
         let problemForm = problemiframe.contentWindow.document.getElementById('problemMainForm')  // don't croak when the empty iframe is first loaded
         if (!problemForm) {
-            console.log('hideButtons: could not find form! has a problem been rendered?');
+            /* console.log('hideButtons: could not find form! has a problem been rendered?'); */
             return;
         }
-        console.log('hideButtons: enabling/disabling show answers');
+        /* console.log('hideButtons: enabling/disabling show answers'); */
         var my_buttons = problemiframe.contentWindow.document.getElementsByName("showCorrectAnswers") // name in standalone
         my_buttons.forEach(button => { button.disabled = hideShowAnswers; })
         my_buttons = problemiframe.contentWindow.document.getElementsByName("WWcorrectAns") // name in html2xml
         my_buttons.forEach(button => { button.disabled = hideShowAnswers; })
 
-        console.log('hideButtons: enabling/disabling preview');
+        /* console.log('hideButtons: enabling/disabling preview'); */
         my_buttons = problemiframe.contentWindow.document.getElementsByName("previewAnswers") // name in standalone
         my_buttons.forEach(button => { button.disabled = hidePreview; })
         my_buttons = problemiframe.contentWindow.document.getElementsByName("preview") // name in html2xml
         my_buttons.forEach(button => { button.disabled = hidePreview; })
 
-        console.log('hideButtons: enabling/disabling submit');
+        /* console.log('hideButtons: enabling/disabling submit'); */
         my_buttons = problemiframe.contentWindow.document.getElementsByName("submitAnswers") // name in standalone
         my_buttons.forEach(button => { button.disabled = hideSubmit; })
         my_buttons = problemiframe.contentWindow.document.getElementsByName("WWsubmit") // name in html2xml
@@ -80,13 +82,13 @@ function WeBWorKXBlockIframed(runtime, element, initdata) {
     function activeButton() {
         let problemForm = problemiframe.contentWindow.document.getElementById('problemMainForm')
         if (!problemForm) {
-            console.log('could not find form! has a problem been rendered?');
+            /* console.log('could not find form! has a problem been rendered?'); */
             return;
         }
         problemForm.querySelectorAll('.btn-primary').forEach(
             button => {
                 button.addEventListener('click', () => {
-                    console.log('clicked: ', button);
+                    /* console.log('clicked: ', button); */
                 })
             })
     }
@@ -98,7 +100,7 @@ function WeBWorKXBlockIframed(runtime, element, initdata) {
     function insertListener() {
         let problemForm = problemiframe.contentWindow.document.getElementById('problemMainForm')  // don't croak when the empty iframe is first loaded
         if (!problemForm) {
-            console.log('could not find form! has a problem been rendered?');
+            /* console.log('could not find form! has a problem been rendered?'); */
             return;
         }
         problemForm.addEventListener('submit', event => {
@@ -170,7 +172,7 @@ function WeBWorKXBlockIframed(runtime, element, initdata) {
     // That code is licensed under GPL 3.0
 
     problemiframe.addEventListener('load', () => {
-        console.log('loaded...' + initdata.rpID);
+        /* console.log('loaded...' + initdata.rpID); */
         activeButton();
         insertListener();
         hideButtons();
